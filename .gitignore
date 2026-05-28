@@ -1,0 +1,38 @@
+# Environment / secrets
+config/config.local.php
+.env
+.env.local
+*.local
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# IDE / editor
+.vscode/
+.idea/
+.claude/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+error_log
+
+# Composer / vendor (none used, but future-proof)
+/vendor/
+composer.lock
+
+# PHPUnit / cache
+.phpunit.result.cache
+.phpcs-cache
+
+# Backups
+*.bak
+*.old
+DATABASE FILE/
