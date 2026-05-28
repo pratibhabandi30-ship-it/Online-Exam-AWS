@@ -27,13 +27,35 @@
 
 ## 🖼️ Screenshots
 
-> Add screenshots in `assets/img/screenshots/` and link them here once you've taken a look around. Suggested shots:
->
-> - Landing page  ·  `landing.png`
-> - Student dashboard  ·  `dashboard.png`
-> - Exam in progress (timer + question palette)  ·  `exam.png`
-> - Result page (score ring + breakdown)  ·  `result.png`
-> - Admin analytics  ·  `admin-analytics.png`
+### Landing page
+> Hero section with live exam preview + feature grid.
+
+![Landing page](assets/img/screenshots/landing.png)
+
+### Student dashboard
+> At-a-glance KPI cards, score-trend chart (Chart.js), and recent attempts.
+
+![Student dashboard](assets/img/screenshots/dashboard.png)
+
+### Timed exam
+> Sticky countdown timer, sticky question palette, and accessible radio options. Auto-submits at zero.
+
+![Timed exam](assets/img/screenshots/exam.png)
+
+### Result page
+> Animated score ring, pass/fail grade, per-question breakdown, and PDF / CSV export buttons.
+
+![Result](assets/img/screenshots/result.png)
+
+### Admin dashboard
+> System KPIs, 14-day attempts bar chart, and a live feed of recent attempts.
+
+![Admin dashboard](assets/img/screenshots/admin-dashboard.png)
+
+### Admin analytics
+> 30-day attempts trend, accuracy doughnut by topic, and a per-quiz summary table.
+
+![Admin analytics](assets/img/screenshots/admin-analytics.png)
 
 ---
 
@@ -244,3 +266,25 @@ Issues, bug reports, and feature requests are all welcome.
 Built with ❤️ for students who deserve a clean starting point — not a 2015-era PHP tutorial.
 
 If this helped your project, consider giving the repo a ⭐ on GitHub!
+
+---
+
+## 🌐 Connect with the developer
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Aashana-0A66C2?logo=linkedin&logoColor=white&style=for-the-badge)](https://in.linkedin.com/in/aashana1012)
+[![GitHub](https://img.shields.io/badge/GitHub-aashishbharti04-181717?logo=github&logoColor=white&style=for-the-badge)](https://github.com/aashishbharti04)
+[![YouTube](https://img.shields.io/badge/YouTube-@CodeWithAsur-FF0000?logo=youtube&logoColor=white&style=for-the-badge)](https://www.youtube.com/@CodeWithAsur)
+[![Instagram](https://img.shields.io/badge/Instagram-@asurwave1012-E4405F?logo=instagram&logoColor=white&style=for-the-badge)](https://www.instagram.com/asurwave1012)
+[![Gmail](https://img.shields.io/badge/Email-aashish@marketdoctorsonline.com-EA4335?logo=gmail&logoColor=white&style=for-the-badge)](mailto:aashish@marketdoctorsonline.com)
+
+📺 **Subscribe to [@CodeWithAsur](https://www.youtube.com/@CodeWithAsur)** for more PHP / full-stack web-dev tutorials and project walkthroughs!
+
+---
+
+<div align="center">
+
+**© 2026 Online Exam System · Crafted by [Aashish Bharti](https://github.com/aashishbharti04)** &middot; Licensed under [MIT](LICENSE)
+
+*All rights reserved.*
+
+</div>

@@ -126,7 +126,18 @@ body {
 .score-ring > span { position: relative; font-size: 2.5rem; font-weight: 800; }
 
 /* Footer */
-.oes-footer { background: transparent; }
+.oes-footer {
+  background: linear-gradient(180deg, transparent, rgba(79,70,229,.04));
+}
+.oes-footer h6 { letter-spacing: .04em; }
+.oes-footer a:hover { color: var(--oes-primary) !important; }
+
+.social-btn { transition: all .15s ease; }
+.social-btn:hover { transform: translateY(-2px); border-color: var(--oes-primary); color: var(--oes-primary); }
+.social-btn .bi-linkedin:hover { color: #0a66c2; }
+.social-btn .bi-github:hover   { color: #181717; }
+.social-btn .bi-youtube:hover  { color: #ff0000; }
+.social-btn .bi-instagram:hover { color: #e4405f; }
 
 /* Utility */
 .text-gradient {
