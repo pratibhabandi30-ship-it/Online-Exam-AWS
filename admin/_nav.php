@@ -7,6 +7,7 @@ $items = [
     'dashboard' => ['Dashboard',   'admin/dashboard.php',  'bi-speedometer2'],
     'quizzes'   => ['Quizzes',     'admin/quizzes.php',    'bi-collection'],
     'attempts'  => ['Attempts',    'admin/attempts.php',   'bi-clipboard-data'],
+    'certificates' => ['Certificates', 'admin/certificates.php', 'bi-award'],
     'users'     => ['Users',       'admin/users.php',      'bi-people'],
     'feedback'  => ['Feedback',    'admin/feedback.php',   'bi-chat-dots'],
     'analytics' => ['Analytics',   'admin/analytics.php',  'bi-graph-up-arrow'],

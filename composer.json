@@ -1,0 +1,6 @@
+{
+  "license": "MIT",
+  "require": {
+    "dompdf/dompdf": "^3.1"
+  }
+}

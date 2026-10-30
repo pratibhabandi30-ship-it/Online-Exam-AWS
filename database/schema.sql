@@ -50,8 +50,10 @@ CREATE TABLE `quizzes` (
   `title`           VARCHAR(150) NOT NULL,
   `tag`             VARCHAR(60)  DEFAULT NULL,
   `intro`           TEXT         DEFAULT NULL,
+  `image_path`      VARCHAR(255) DEFAULT NULL,
   `duration_minutes` INT UNSIGNED NOT NULL DEFAULT 5,
   `passing_percent` TINYINT UNSIGNED NOT NULL DEFAULT 50,
+  `difficulty`      ENUM('Beginner','Intermediate') NOT NULL DEFAULT 'Beginner',
   `is_published`    TINYINT(1)   NOT NULL DEFAULT 1,
   `created_by`      INT UNSIGNED DEFAULT NULL,
   `created_at`      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -71,6 +73,7 @@ CREATE TABLE `questions` (
   `quiz_id`    INT UNSIGNED NOT NULL,
   `text`       TEXT         NOT NULL,
   `marks`      TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `difficulty` ENUM('Beginner','Intermediate') NOT NULL DEFAULT 'Beginner',
   `position`   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   `created_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -152,6 +155,36 @@ CREATE TABLE `feedback` (
   PRIMARY KEY (`id`),
   KEY `idx_feedback_user` (`user_id`),
   CONSTRAINT `fk_feedback_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- CERTIFICATES (one issued certificate per eligible attempt)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `certificates` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `certificate_id` VARCHAR(32) NOT NULL,
+  `student_id` INT UNSIGNED NOT NULL,
+  `exam_id` INT UNSIGNED NOT NULL,
+  `attempt_id` INT UNSIGNED NOT NULL,
+  `certificate_type` ENUM('Silver','Gold','Platinum') NOT NULL,
+  `percentage` DECIMAL(8,5) NOT NULL,
+  `grade` VARCHAR(3) NOT NULL,
+  `issue_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `verification_token` CHAR(64) NOT NULL,
+  `status` ENUM('issued','revoked') NOT NULL DEFAULT 'issued',
+  `revocation_reason` VARCHAR(500) DEFAULT NULL,
+  `revoked_at` TIMESTAMP NULL DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_certificates_certificate_id` (`certificate_id`),
+  UNIQUE KEY `uniq_certificates_attempt_id` (`attempt_id`),
+  UNIQUE KEY `uniq_certificates_verification_token` (`verification_token`),
+  KEY `idx_certificates_student` (`student_id`),
+  KEY `idx_certificates_exam` (`exam_id`),
+  KEY `idx_certificates_type_status` (`certificate_type`, `status`),
+  CONSTRAINT `fk_certificates_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_certificates_exam` FOREIGN KEY (`exam_id`) REFERENCES `quizzes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_certificates_attempt` FOREIGN KEY (`attempt_id`) REFERENCES `attempts` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

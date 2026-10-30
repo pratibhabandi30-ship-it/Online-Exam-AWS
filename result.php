@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/certificates.php';
 
 $me = require_login();
 $attemptId = (int) ($_GET['id'] ?? 0);
@@ -42,6 +43,15 @@ $breakdown = $brk->fetchAll();
 $pct = $att['total_marks'] > 0 ? round($att['score'] * 100 / $att['total_marks'], 1) : 0.0;
 $passed = $pct >= (float) $att['passing_percent'];
 $grade  = grade_letter($pct);
+$certificateStmt = $pdo->prepare("SELECT certificate_id, certificate_type, status FROM certificates WHERE attempt_id = ? LIMIT 1");
+$certificateStmt->execute([$attemptId]);
+$certificate = $certificateStmt->fetch();
+if ($certificate) {
+    $certificate = find_certificate($pdo, $certificate['certificate_id']);
+    if (!$certificate || !certificate_record_matches_attempt($certificate)) {
+        $certificate = null;
+    }
+}
 
 $pageTitle = 'Result · ' . $att['quiz_title'];
 include __DIR__ . '/includes/header.php';
@@ -72,10 +82,18 @@ include __DIR__ . '/includes/header.php';
         </div>
 
         <div class="d-flex flex-wrap gap-2 mt-4">
+          <?php if ($certificate && $certificate['status'] === 'issued'): ?>
+            <a class="btn btn-success" href="<?= e(base_url('certificate.php?id=' . rawurlencode($certificate['certificate_id']))) ?>"><i class="bi bi-award"></i> View <?= e($certificate['certificate_type']) ?> Certificate</a>
+          <?php endif; ?>
           <a class="btn btn-outline-primary" href="<?= e(base_url('export.php?type=pdf&attempt=' . (int) $att['id'])) ?>" target="_blank"><i class="bi bi-file-earmark-pdf"></i> Download PDF</a>
           <a class="btn btn-outline-secondary" href="<?= e(base_url('export.php?type=csv&attempt=' . (int) $att['id'])) ?>"><i class="bi bi-filetype-csv"></i> Export CSV</a>
           <a class="btn btn-primary" href="<?= e(base_url('take-exam.php?quiz=' . (int) $att['quiz_id'])) ?>"><i class="bi bi-arrow-clockwise"></i> Retake</a>
         </div>
+        <?php if ($certificate && $certificate['status'] === 'issued' && !$passed): ?>
+          <div class="alert alert-info small py-2 mt-3 mb-0">
+            Certificate tier follows the fixed achievement thresholds; exam pass status follows this quiz's configured passing score.
+          </div>
+        <?php endif; ?>
       </div>
     </div>
   </div>

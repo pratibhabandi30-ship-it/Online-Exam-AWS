@@ -1,0 +1,38 @@
+Course photographs
+==================
+
+All photographs below were downloaded from Unsplash and are used under the
+Unsplash License: https://unsplash.com/license
+The license permits free use and modification; attribution is not required.
+
+Course file                              Unsplash photo ID
+---------------------------------------  --------------------------------------
+php-fundamentals.jpg                     1555949963-aa79dcee981c
+javascript-essentials.jpg                1461749280684-dccba630e2f6
+database-sql.jpg                         1563986768609-322da13575f3
+computer-networks.jpg                    1520869562399-e772f042f422
+data-structures.jpg                      1522202176988-66273c2fd55f
+python-programming.jpg                   1517694712202-14dd9538aa97
+java-programming.jpg                     1515879218367-8466d910aaa4
+c-programming.jpg                        1504639725590-34d0984388bd
+cpp-programming.jpg                      1555066931-4365d14bab8c
+object-oriented-programming.jpg           1531403009284-440f080d1e12
+operating-systems.jpg                    1561736778-92e52a7769ef
+software-engineering.jpg                 1552664730-d307ca884978
+computer-organization-architecture.jpg   1518770660439-4636190af475
+theory-of-computation.jpg                1519389950473-47ba0277781c
+compiler-design.jpg                      1563206767-5b18f218e8de
+html-css.jpg                             1522542550221-31fd19575a2d
+react-development.jpg                    1516321318423-f06f85e504b3
+php-mysql-web-development.jpg             1498050108023-c5249f4df085
+full-stack-web-development.jpg            1531482615713-2afd69097998
+artificial-intelligence.jpg              1581092160562-40aa08e78837
+machine-learning.jpg                     1551288049-bebda4e38f71
+data-science-fundamentals.jpg            1460925895917-afdab827c52f
+deep-learning.jpg                        1581091226825-a6a2a5aee158
+cloud-computing-aws.jpg                  1558494949-ef010cbdcc31
+cyber-security-fundamentals.jpg          1562813733-b31f71025d54
+course-default.jpg                       1524758631624-e2822e304c36
+
+The image files are locally stored, cropped to 1200 x 675 pixels, and served
+without external image requests.

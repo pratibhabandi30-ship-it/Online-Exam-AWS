@@ -19,11 +19,12 @@ $stmt->execute([$quizId]);
 $quiz = $stmt->fetch();
 if (!$quiz) { flash('error','Exam not found.'); redirect('exams.php'); }
 
-$qStmt = $pdo->prepare("SELECT id, text, marks FROM questions WHERE quiz_id=? ORDER BY position, id");
+$qStmt = $pdo->prepare("SELECT id, text, marks, difficulty FROM questions WHERE quiz_id=? ORDER BY position, id");
 $qStmt->execute([$quizId]);
 $questions = $qStmt->fetchAll();
 
 if (!$questions) { flash('error','This exam has no questions yet.'); redirect('exams.php'); }
+shuffle($questions);
 
 $ids = array_column($questions, 'id');
 $placeholders = implode(',', array_fill(0, count($ids), '?'));
@@ -65,7 +66,7 @@ include __DIR__ . '/includes/header.php';
         ?>
           <div class="card question-card p-4 mb-3" id="q-<?= (int) $q['id'] ?>">
             <div class="d-flex justify-content-between align-items-start mb-2">
-              <span class="text-muted small">Question <?= $i+1 ?> of <?= count($questions) ?> · <?= (int) $q['marks'] ?> mark<?= $q['marks']>1?'s':'' ?></span>
+              <span class="text-muted small">Question <?= $i+1 ?> of <?= count($questions) ?> · <?= (int) $q['marks'] ?> mark<?= $q['marks']>1?'s':'' ?> · <?= e($q['difficulty']) ?></span>
             </div>
             <h5 class="mb-3"><?= e($q['text']) ?></h5>
             <?php foreach ($opts as $o): ?>

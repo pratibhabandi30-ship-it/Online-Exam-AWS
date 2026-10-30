@@ -15,6 +15,7 @@
 - 🔐 **Role-based authentication** — separate student and admin flows, bcrypt-hashed passwords, CSRF protection, session regeneration on login.
 - ⏱️ **Timed exams** — per-quiz countdown timer with auto-submit, anti-leave warning, and a question palette for jumping around.
 - 🧠 **Instant grading & detailed breakdown** — see correct/wrong/skipped answers and the actual correct option per question.
+- 🏅 **Achievement certificates** — automatic Silver, Gold, and Platinum certificates, public verification, PDF download, and admin revocation.
 - 📊 **Charts & analytics** — score trends, accuracy by topic, attempts-over-time (powered by Chart.js).
 - 🏆 **Leaderboard** — global ranking by total marks earned.
 - 📄 **PDF / CSV export** — print-ready PDF reports of any attempt + bulk CSV exports for admins.
@@ -61,7 +62,7 @@
 
 ## 🚀 Quick start (XAMPP / WAMP / MAMP)
 
-This project was deliberately designed to require **no Composer, no Node, no build step**. If you've got XAMPP running, you can be live in under two minutes.
+This project uses Composer for server-generated certificate PDFs; no Node or frontend build step is required.
 
 ### 1. Clone into your web root
 
@@ -87,6 +88,18 @@ const DB_PASS = '';        // XAMPP default
 
 ### 3. Run the one-time installer
 
+From the project directory, install PHP dependencies (including Dompdf for certificate PDFs):
+
+```bash
+composer install
+```
+
+If Composer is not on `PATH`, run its PHAR using XAMPP's PHP executable, for example:
+
+```powershell
+C:\xampp\php\php.exe C:\path\to\composer.phar install
+```
+
 Start Apache + MySQL in XAMPP, then in your browser:
 
 ```
@@ -96,11 +109,61 @@ http://localhost/online-exam-system/install.php
 The installer will:
 
 1. Create the `online_exam_system` database
-2. Import all tables + 5 sample quizzes (15 questions)
+2. Import all tables + 25 quizzes (215 questions)
 3. Create your **admin account** with a bcrypt-hashed password
 4. Optionally create a demo student (`student@oes.local` / `student@123`)
 
 When you're done, **delete `install.php`** from the server.
+
+### Add the expanded course catalog to an existing installation
+
+The catalog update is additive and idempotent. It adds `difficulty` columns to
+`quizzes` and `questions` when missing, then inserts the 20 new published courses
+and their 10 four-option questions each. It does not drop existing tables, change
+the original five courses, or remove exam attempts.
+
+From PowerShell, run the migration with XAMPP's PHP:
+
+```powershell
+C:\xampp\php\php.exe C:\xampp\htdocs\online-exam-system\database\migrations\20261030_expand_course_catalog.php
+```
+
+Verify the seeded records and answer options:
+
+```powershell
+C:\xampp\php\php.exe C:\xampp\htdocs\online-exam-system\tests\course-catalog.php
+```
+
+The Browse Exams page lists published courses with search, category and difficulty
+filters, name/newest sorting, and pagination. Admins can manage course and question
+difficulty in the existing Quizzes and Questions pages. A quiz with saved attempts
+is unpublished rather than permanently deleted so result and certificate history
+remains available.
+
+### Add course thumbnails to an existing installation
+
+Back up the database, then run the thumbnail migration from PowerShell:
+
+```powershell
+C:\xampp\php\php.exe C:\xampp\htdocs\online-exam-system\database\migrations\20261030_add_course_thumbnails.php
+```
+
+The migration verifies the expected course names at their existing IDs (and
+uses an exact, unique course-title match if IDs differ in another installation),
+adds the nullable `quizzes.image_path` column if needed, and assigns each
+existing course a unique local 16:9 photograph. The photos are downloaded from
+Unsplash and used under the [Unsplash License](https://unsplash.com/license);
+source IDs are listed in `assets/images/courses/ATTRIBUTION.txt`. It is safe to
+rerun and does not create, delete, or modify exam questions. Deploy the
+migration and `assets\images\courses` folder with the application files. The
+admin quiz form accepts optional JPEG, PNG, or WebP thumbnails up to 5 MB; a
+local photographic default is used when no image is assigned.
+
+Run the thumbnail check with:
+
+```powershell
+C:\xampp\php\php.exe C:\xampp\htdocs\online-exam-system\tests\course-thumbnails.php
+```
 
 ### 4. Sign in
 
@@ -115,6 +178,8 @@ That's it. 🎉
 
 ```
 online-exam-system/
+├── composer.json          Dompdf dependency manifest
+├── composer.lock          Locked PHP dependencies
 ├── index.php              Landing page (with feature tour)
 ├── install.php            One-time installer (delete after use)
 ├── login.php              Student sign-in
@@ -125,6 +190,10 @@ online-exam-system/
 ├── take-exam.php          Timed exam UI with question palette
 ├── submit-exam.php        Grading + persistence
 ├── result.php             Result page with detailed breakdown
+├── certificates.php       Student certificate library
+├── certificate.php        Authenticated certificate preview
+├── certificate-pdf.php    Verified Dompdf certificate download
+├── verify-certificate.php Public certificate verification
 ├── history.php            All attempts + accuracy chart
 ├── leaderboard.php        Global top-50 ranking
 ├── profile.php            Edit profile + change password
@@ -137,14 +206,20 @@ online-exam-system/
 │   ├── quizzes.php        Quiz CRUD
 │   ├── questions.php      Question CRUD with options
 │   ├── attempts.php       View / filter / CSV-export all attempts
+│   ├── certificates.php   Search, inspect, download, and revoke certificates
 │   ├── users.php          Manage students (toggle, delete)
 │   ├── feedback.php       Read & manage feedback
 │   └── analytics.php      System-wide analytics
 │
 ├── includes/              Shared PHP — db, auth, header, footer, helpers
+│   ├── certificates.php   Eligibility, issuance, and verification helpers
+│   └── certificate-template.php  Shared print/PDF certificate layout
 ├── config/                Application config
 ├── database/
-│   └── schema.sql         Full schema + sample content
+│   ├── schema.sql         Full schema + sample content
+│   └── migrations/        Safe incremental database updates
+├── tests/
+│   └── certificate-rules.php  Certificate tier and record validation checks
 ├── assets/
 │   ├── css/style.css      Custom theme
 │   ├── js/app.js          Timer, theme toggle, helpers
@@ -156,7 +231,7 @@ online-exam-system/
 
 ## 🗃️ Database schema
 
-7 normalised tables with proper foreign keys, indexes, and `utf8mb4` charset:
+8 normalised tables with proper foreign keys, indexes, and `utf8mb4` charset:
 
 | Table              | Purpose                                       |
 | ------------------ | --------------------------------------------- |
@@ -167,8 +242,17 @@ online-exam-system/
 | `attempts`         | One row per submitted exam attempt             |
 | `attempt_answers`  | Per-question record of what the student picked |
 | `feedback`         | User feedback / bug reports                    |
+| `certificates`     | Issued/revoked achievement certificates        |
 
 Full DDL lives in [`database/schema.sql`](database/schema.sql).
+
+### Upgrade an existing database
+
+Back up the database, then import [`database/migrations/20261030_create_certificates.sql`](database/migrations/20261030_create_certificates.sql) in phpMyAdmin with `online_exam_system` selected. The migration only creates the certificates table if it does not exist and does not delete or rewrite existing rows. Do **not** rerun `install.php` against an existing database: the fresh-install schema drops and recreates the application's existing tables. Run `composer install` in the project directory so PDF downloads are available.
+
+Certificate tiers are assigned from the exact stored score divided by maximum marks: below 35% earns none, 35%–<50% Silver, 50%–<80% Gold, and 80%–100% Platinum. Quiz pass/fail continues to use each quiz's configured `passing_percent`, independently of certificate tier.
+
+Opening **My Certificates** also performs an idempotent backfill for that student from completed attempts already stored in the database. Existing eligible attempts are issued once; the unique attempt constraint prevents duplicate certificates.
 
 ---
 
@@ -196,6 +280,30 @@ After running the installer, you can sign in with whatever you set up. If you ac
 | Student | `student@oes.local` | `student@123` |
 
 > ⚠️ **Change these in any non-local environment.**
+
+## 🏅 Certificate workflow checks
+
+Run the isolated rule and record-validation checks from the project directory:
+
+```powershell
+C:\xampp\php\php.exe tests\certificate-rules.php
+```
+
+1. Sign in as a student and open **My Certificates**. Eligible existing attempts are backfilled automatically; no retake is required. New completed exams issue a certificate in the same database transaction as the saved answers. Scores below 35% earn none.
+2. Use a published test quiz with 100 one-mark questions to produce exact percentages of 25, 35, 49, 50, 79, 80, and 100. Submit the corresponding number of correct answers and check **My Certificates**:
+
+   | Score | Expected result |
+   | ----- | --------------- |
+   | 25%   | No certificate  |
+   | 35%   | Silver          |
+   | 49%   | Silver          |
+   | 50%   | Gold            |
+   | 79%   | Gold            |
+   | 80%   | Platinum        |
+   | 100%  | Platinum        |
+
+3. Open a certificate preview, download its PDF, and verify its ID using the public link. Check that the output is A4 landscape and that the type-specific border and badge match.
+4. Sign in as admin, open **Certificates**, search by student/certificate ID, filter by tier, and revoke a test certificate with a reason. Its public verification page should report it invalid; the student view should display its revoked state and not offer a PDF download.
 
 ---
 

@@ -23,6 +23,63 @@
     });
   }
 
+  // ---------- Landing page motion and actual-count statistics ----------
+  const homePage = document.querySelector('.home-page');
+  if (homePage) {
+    const revealItems = document.querySelectorAll('[data-reveal]');
+    const counters = document.querySelectorAll('[data-count]');
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const formatCount = value => new Intl.NumberFormat().format(value);
+
+    if ('IntersectionObserver' in window && !prefersReducedMotion) {
+      homePage.classList.add('motion-enabled');
+      const revealObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.14 });
+      revealItems.forEach(item => revealObserver.observe(item));
+
+      const countObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return;
+          const element = entry.target;
+          const target = Number.parseInt(element.dataset.count, 10);
+          if (!Number.isFinite(target) || target <= 0) {
+            element.textContent = '0';
+            countObserver.unobserve(element);
+            return;
+          }
+          const start = performance.now();
+          const duration = 950;
+          const animate = now => {
+            const progress = Math.min((now - start) / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            element.textContent = formatCount(Math.round(target * eased));
+            if (progress < 1) window.requestAnimationFrame(animate);
+          };
+          window.requestAnimationFrame(animate);
+          countObserver.unobserve(element);
+        });
+      }, { threshold: 0.45 });
+      counters.forEach(counter => countObserver.observe(counter));
+    }
+
+    document.querySelectorAll('.home-page-content a[href^="#"]').forEach(link => {
+      link.addEventListener('click', event => {
+        const target = document.querySelector(link.getAttribute('href'));
+        if (target) {
+          event.preventDefault();
+          target.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+          history.replaceState(null, '', link.getAttribute('href'));
+        }
+      });
+    });
+  }
+
   // ---------- Exam timer ----------
   const timerEl = document.getElementById('examTimer');
   if (timerEl) {
@@ -95,4 +152,22 @@
     const grow = () => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; };
     t.addEventListener('input', grow); grow();
   });
+
+  // ---------- Course thumbnail preview ----------
+  const thumbnailInput = document.getElementById('courseThumbnail');
+  const thumbnailPreview = document.getElementById('courseThumbnailPreview');
+  if (thumbnailInput && thumbnailPreview) {
+    let previewUrl = null;
+    thumbnailInput.addEventListener('change', () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      const file = thumbnailInput.files && thumbnailInput.files[0];
+      if (file) {
+        previewUrl = URL.createObjectURL(file);
+        thumbnailPreview.src = previewUrl;
+      }
+    });
+    window.addEventListener('beforeunload', () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    }, { once: true });
+  }
 })();

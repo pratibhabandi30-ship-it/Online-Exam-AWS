@@ -10,7 +10,12 @@ $counts = [
     'quizzes'  => (int) $pdo->query("SELECT COUNT(*) FROM quizzes")->fetchColumn(),
     'attempts' => (int) $pdo->query("SELECT COUNT(*) FROM attempts")->fetchColumn(),
     'feedback' => (int) $pdo->query("SELECT COUNT(*) FROM feedback WHERE is_read=0")->fetchColumn(),
+    'certificates' => (int) $pdo->query("SELECT COUNT(*) FROM certificates WHERE status='issued'")->fetchColumn(),
 ];
+$certificateCounts = ['Silver' => 0, 'Gold' => 0, 'Platinum' => 0];
+foreach ($pdo->query("SELECT certificate_type, COUNT(*) AS amount FROM certificates WHERE status='issued' GROUP BY certificate_type") as $certificateCount) {
+    $certificateCounts[$certificateCount['certificate_type']] = (int) $certificateCount['amount'];
+}
 
 $recent = $pdo->query("
     SELECT a.id, a.score, a.total_marks, a.submitted_at,
@@ -40,6 +45,22 @@ include __DIR__ . '/_nav.php';
       <p class="text-muted mb-0">Welcome, <?= e($admin['name']) ?>.</p>
     </div>
     <a class="btn btn-primary" href="<?= e(base_url('admin/quizzes.php?action=new')) ?>"><i class="bi bi-plus-lg"></i> New quiz</a>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <?php foreach ([
+      ['Certificates issued', $counts['certificates'], 'bi-award', 'primary'],
+      ['Silver', $certificateCounts['Silver'], 'bi-award-fill', 'secondary'],
+      ['Gold', $certificateCounts['Gold'], 'bi-award-fill', 'warning'],
+      ['Platinum', $certificateCounts['Platinum'], 'bi-award-fill', 'info'],
+    ] as [$label, $amount, $icon, $color]): ?>
+      <div class="col-6 col-lg-3"><div class="card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center">
+          <div><div class="text-muted small text-uppercase"><?= e($label) ?></div><div class="fs-3 fw-bold"><?= (int) $amount ?></div></div>
+          <div class="feature-icon text-<?= e($color) ?>"><i class="bi <?= e($icon) ?>"></i></div>
+        </div>
+      </div></div>
+    <?php endforeach; ?>
   </div>
 
   <div class="row g-3 mb-4">

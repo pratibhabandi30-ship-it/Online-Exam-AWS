@@ -1,3 +1,48 @@
+<?php if (($activeNav ?? '') === 'home'): ?>
+<footer class="oes-footer home-footer">
+  <div class="container">
+    <div class="row g-5 pb-4">
+      <div class="col-lg-5">
+        <a class="home-footer-brand" href="<?= e(base_url('index.php')) ?>">
+          <span><i class="bi bi-mortarboard-fill"></i></span><?= e(APP_NAME) ?>
+        </a>
+        <p class="home-footer-description">A thoughtful, secure examination platform to help students build confidence, track their growth, and make every achievement count.</p>
+        <a class="home-footer-email" href="mailto:aashish@marketdoctorsonline.com"><i class="bi bi-envelope"></i> aashish@marketdoctorsonline.com</a>
+      </div>
+      <div class="col-6 col-lg-2">
+        <h2 class="home-footer-heading">Explore</h2>
+        <ul class="home-footer-links">
+          <li><a href="<?= e(base_url('exams.php')) ?>">Browse courses</a></li>
+          <li><a href="<?= e(base_url('index.php#features')) ?>">Platform features</a></li>
+          <li><a href="<?= e(base_url('index.php#how')) ?>">How it works</a></li>
+          <li><a href="<?= e(base_url('index.php#faq')) ?>">FAQs</a></li>
+        </ul>
+      </div>
+      <div class="col-6 col-lg-2">
+        <h2 class="home-footer-heading">Platform</h2>
+        <ul class="home-footer-links">
+          <li><a href="<?= e(base_url('index.php#achievements')) ?>">Certificates</a></li>
+          <li><a href="<?= e(base_url('login.php')) ?>">Student login</a></li>
+          <li><a href="<?= e(base_url('admin/login.php')) ?>">Admin login</a></li>
+          <li><a href="<?= e(base_url('feedback.php')) ?>">Contact / feedback</a></li>
+        </ul>
+      </div>
+      <div class="col-lg-3">
+        <div class="home-footer-note">
+          <span><i class="bi bi-shield-check"></i></span>
+          <strong>Built for a better learning experience.</strong>
+          <small>Secure exams. Clear results. Recognized progress.</small>
+        </div>
+        <a class="home-footer-register" href="<?= e(base_url('register.php')) ?>">Create student account <i class="bi bi-arrow-up-right"></i></a>
+      </div>
+    </div>
+    <div class="home-footer-bottom">
+      <span>&copy; <?= date('Y') ?> <strong><?= e(APP_NAME) ?></strong>. All rights reserved.</span>
+      <span>Learning, measured with purpose.</span>
+    </div>
+  </div>
+</footer>
+<?php else: ?>
 <footer class="oes-footer mt-5 pt-5 pb-4 border-top">
   <div class="container">
     <div class="row g-4 mb-4">
@@ -60,8 +105,9 @@
     </div>
   </div>
 </footer>
+<?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="<?= e(base_url('assets/js/app.js')) ?>"></script>
+<script src="<?= e(base_url('assets/js/app.js?v=20261030-courses')) ?>"></script>
 </body>
 </html>

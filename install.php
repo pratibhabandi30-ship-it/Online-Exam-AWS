@@ -63,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Now reconnect targeting the DB and seed the admin/demo.
                 $pdo = db();
+                require_once __DIR__ . '/database/migrations/20261030_expand_course_catalog.php';
+                expand_course_catalog($pdo);
 
                 $hash = password_hash($adminPass, PASSWORD_ALGO);
                 $stmt = $pdo->prepare("INSERT INTO users (name,email,password_hash,role,is_active,gender,college) VALUES (?,?,?,'admin',1,'O','OES HQ')

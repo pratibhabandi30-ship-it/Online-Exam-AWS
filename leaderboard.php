@@ -8,9 +8,7 @@ $pdo = db();
 $rows = $pdo->query("
     SELECT u.id, u.name, u.college,
            SUM(a.score) AS total_score,
-           SUM(a.total_marks) AS total_marks,
-           COUNT(*) AS attempts,
-           MAX(a.submitted_at) AS last_attempt
+           COUNT(*) AS attempts
     FROM attempts a JOIN users u ON u.id = a.user_id
     WHERE u.role = 'student'
     GROUP BY u.id
@@ -34,13 +32,25 @@ include __DIR__ . '/includes/header.php';
       <p class="text-center text-muted my-4">No attempts on record yet.</p>
     <?php else: ?>
       <div class="table-responsive">
-        <table class="table align-middle">
+        <table class="table align-middle mb-0" style="table-layout: fixed;">
+          <colgroup>
+            <col style="width: 8%;">
+            <col style="width: 27%;">
+            <col style="width: 27%;">
+            <col style="width: 20%;">
+            <col style="width: 18%;">
+          </colgroup>
           <thead>
-            <tr><th>#</th><th>Student</th><th>College</th><th class="text-center">Attempts</th><th class="text-center">Accuracy</th><th class="text-end">Total score</th></tr>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Student Name</th>
+              <th scope="col">College</th>
+              <th scope="col" class="text-center">Total Attempts</th>
+              <th scope="col" class="text-end">Total Score</th>
+            </tr>
           </thead>
           <tbody>
             <?php foreach ($rows as $i => $r):
-              $acc = $r['total_marks']>0 ? round($r['total_score']*100/$r['total_marks'],1) : 0;
               $isMe = (int)$r['id'] === (int)$me['id'];
             ?>
               <tr class="<?= $isMe ? 'table-primary' : '' ?>">
@@ -51,8 +61,7 @@ include __DIR__ . '/includes/header.php';
                 <td><?= e($r['name']) ?> <?php if ($isMe): ?><span class="badge bg-primary">You</span><?php endif; ?></td>
                 <td class="small text-muted"><?= e($r['college'] ?: '—') ?></td>
                 <td class="text-center"><?= (int) $r['attempts'] ?></td>
-                <td class="text-center"><span class="badge bg-<?= $acc>=70?'success':($acc>=50?'warning':'danger') ?>"><?= $acc ?>%</span></td>
-                <td class="text-end fw-bold"><?= (int) $r['total_score'] ?></td>
+                <td class="text-end"><span class="badge rounded-pill bg-primary px-3 py-2"><?= (int) $r['total_score'] ?></span></td>
               </tr>
             <?php endforeach; ?>
           </tbody>

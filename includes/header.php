@@ -13,9 +13,9 @@ $activeNav = $activeNav ?? '';
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🎓</text></svg>">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-<link href="<?= e(base_url('assets/css/style.css')) ?>" rel="stylesheet">
+<link href="<?= e(base_url('assets/css/style.css?v=20261030-courses')) ?>" rel="stylesheet">
 </head>
-<body>
+<body class="<?= $activeNav === 'home' ? 'home-page' : '' ?>">
 <nav class="navbar navbar-expand-lg sticky-top oes-navbar">
   <div class="container">
     <a class="navbar-brand fw-bold" href="<?= e(base_url('index.php')) ?>">
@@ -30,13 +30,21 @@ $activeNav = $activeNav ?? '';
           <li class="nav-item"><a class="nav-link <?= $activeNav==='dashboard'?'active':'' ?>" href="<?= e(base_url('dashboard.php')) ?>"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
           <li class="nav-item"><a class="nav-link <?= $activeNav==='exams'?'active':'' ?>" href="<?= e(base_url('exams.php')) ?>"><i class="bi bi-pencil-square"></i> Exams</a></li>
           <li class="nav-item"><a class="nav-link <?= $activeNav==='history'?'active':'' ?>" href="<?= e(base_url('history.php')) ?>"><i class="bi bi-clock-history"></i> History</a></li>
+          <li class="nav-item"><a class="nav-link <?= $activeNav==='certificates'?'active':'' ?>" href="<?= e(base_url('certificates.php')) ?>"><i class="bi bi-award"></i> My Certificates</a></li>
           <li class="nav-item"><a class="nav-link <?= $activeNav==='leaderboard'?'active':'' ?>" href="<?= e(base_url('leaderboard.php')) ?>"><i class="bi bi-trophy"></i> Leaderboard</a></li>
           <li class="nav-item"><a class="nav-link <?= $activeNav==='feedback'?'active':'' ?>" href="<?= e(base_url('feedback.php')) ?>"><i class="bi bi-chat-dots"></i> Feedback</a></li>
         <?php elseif ($current && $current['role'] === 'admin'): ?>
           <li class="nav-item"><a class="nav-link" href="<?= e(base_url('admin/dashboard.php')) ?>"><i class="bi bi-shield-lock"></i> Admin Panel</a></li>
         <?php else: ?>
-          <li class="nav-item"><a class="nav-link" href="<?= e(base_url('index.php#features')) ?>">Features</a></li>
-          <li class="nav-item"><a class="nav-link" href="<?= e(base_url('index.php#how')) ?>">How it works</a></li>
+          <?php if ($activeNav === 'home'): ?>
+            <li class="nav-item"><a class="nav-link" href="#features">Platform</a></li>
+            <li class="nav-item"><a class="nav-link" href="#courses">Courses</a></li>
+            <li class="nav-item"><a class="nav-link" href="#how">How it works</a></li>
+            <li class="nav-item"><a class="nav-link" href="#faq">FAQ</a></li>
+          <?php else: ?>
+            <li class="nav-item"><a class="nav-link" href="<?= e(base_url('index.php#features')) ?>">Features</a></li>
+            <li class="nav-item"><a class="nav-link" href="<?= e(base_url('index.php#how')) ?>">How it works</a></li>
+          <?php endif; ?>
         <?php endif; ?>
 
         <li class="nav-item">

@@ -7,6 +7,9 @@ config/config.local.php
 # Uploads
 uploads/*
 !uploads/.gitkeep
+!uploads/courses/
+uploads/courses/*
+!uploads/courses/.htaccess
 
 # IDE / editor
 .vscode/
@@ -26,7 +29,6 @@ error_log
 
 # Composer / vendor (none used, but future-proof)
 /vendor/
-composer.lock
 
 # PHPUnit / cache
 .phpunit.result.cache

@@ -18,7 +18,17 @@ if (!$quiz) { flash('error','Quiz not found.'); redirect('admin/quizzes.php'); }
 
 // ---------- DELETE QUESTION ----------
 if ($action === 'delete' && $qid > 0) {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        flash('error', 'Use the delete form to remove a question.');
+        redirect('admin/questions.php?quiz=' . $quizId);
+    }
     verify_csrf();
+    $used = $pdo->prepare("SELECT COUNT(*) FROM attempt_answers WHERE question_id=?");
+    $used->execute([$qid]);
+    if ((int) $used->fetchColumn() > 0) {
+        flash('error', 'This question appears in saved exam attempts and cannot be deleted without changing historical results.');
+        redirect('admin/questions.php?quiz=' . $quizId);
+    }
     $stmt = $pdo->prepare("DELETE FROM questions WHERE id=? AND quiz_id=?");
     $stmt->execute([$qid, $quizId]);
     flash('success','Question deleted.');
@@ -33,6 +43,12 @@ if ($action === 'new' || $action === 'edit') {
         $stmt->execute([$qid, $quizId]);
         $editing = $stmt->fetch();
         if (!$editing) { flash('error','Question not found.'); redirect('admin/questions.php?quiz='.$quizId); }
+        $used = $pdo->prepare("SELECT COUNT(*) FROM attempt_answers WHERE question_id=?");
+        $used->execute([$qid]);
+        if ((int) $used->fetchColumn() > 0) {
+            flash('error', 'This question appears in saved exam attempts and cannot be edited without changing historical results.');
+            redirect('admin/questions.php?quiz=' . $quizId);
+        }
         $os = $pdo->prepare("SELECT * FROM options WHERE question_id=? ORDER BY position, id");
         $os->execute([$qid]);
         $opts = $os->fetchAll();
@@ -41,6 +57,7 @@ if ($action === 'new' || $action === 'edit') {
     $form = [
         'text'  => $editing['text']  ?? '',
         'marks' => $editing['marks'] ?? 1,
+        'difficulty' => $editing['difficulty'] ?? 'Beginner',
         'opts'  => $opts ?: [
             ['text'=>'', 'is_correct'=>1],
             ['text'=>'', 'is_correct'=>0],
@@ -57,31 +74,40 @@ if ($action === 'new' || $action === 'edit') {
         verify_csrf();
         $form['text']  = clean_string($_POST['text'] ?? '', 1000);
         $form['marks'] = max(1, (int) ($_POST['marks'] ?? 1));
+        $form['difficulty'] = clean_string($_POST['difficulty'] ?? '', 20);
         $optTexts      = $_POST['opt_text']    ?? [];
         $correctIdx    = (int) ($_POST['correct'] ?? 0);
+        $form['correct'] = $correctIdx;
 
         if (mb_strlen($form['text']) < 3) $errors[] = 'Question text is too short.';
+        if (!in_array($form['difficulty'], ['Beginner', 'Intermediate'], true)) $errors[] = 'Choose a valid difficulty level.';
 
         $optClean = [];
-        foreach ($optTexts as $idx => $t) {
-            $t = clean_string($t, 500);
-            if ($t !== '') $optClean[] = ['text'=>$t, 'is_correct'=>$idx === $correctIdx ? 1 : 0];
+        for ($idx = 0; $idx < 4; $idx++) {
+            $rawText = is_array($optTexts) ? ($optTexts[$idx] ?? '') : '';
+            $text = is_string($rawText) ? clean_string($rawText, 500) : '';
+            $form['opts'][$idx] = ['text' => $text, 'is_correct' => $idx === $correctIdx ? 1 : 0];
+            if ($text === '') {
+                $errors[] = 'Enter all four answer options.';
+                break;
+            }
+            $optClean[] = $form['opts'][$idx];
         }
-        if (count($optClean) < 2) $errors[] = 'At least two non-empty options are required.';
+        if ($correctIdx < 0 || $correctIdx > 3) $errors[] = 'Choose one of the four answer options as correct.';
         if (!array_filter($optClean, fn($o)=>$o['is_correct'])) $errors[] = 'Mark exactly one correct option.';
 
         if (!$errors) {
             $pdo->beginTransaction();
             try {
                 if ($editing) {
-                    $stmt = $pdo->prepare("UPDATE questions SET text=?, marks=? WHERE id=? AND quiz_id=?");
-                    $stmt->execute([$form['text'], $form['marks'], $editing['id'], $quizId]);
+                    $stmt = $pdo->prepare("UPDATE questions SET text=?, marks=?, difficulty=? WHERE id=? AND quiz_id=?");
+                    $stmt->execute([$form['text'], $form['marks'], $form['difficulty'], $editing['id'], $quizId]);
                     $pdo->prepare("DELETE FROM options WHERE question_id=?")->execute([$editing['id']]);
                     $thisQid = (int) $editing['id'];
                 } else {
                     $pos = (int) $pdo->query("SELECT COALESCE(MAX(position),0)+1 FROM questions WHERE quiz_id=$quizId")->fetchColumn();
-                    $stmt = $pdo->prepare("INSERT INTO questions (quiz_id,text,marks,position) VALUES (?,?,?,?)");
-                    $stmt->execute([$quizId, $form['text'], $form['marks'], $pos]);
+                    $stmt = $pdo->prepare("INSERT INTO questions (quiz_id,text,marks,difficulty,position) VALUES (?,?,?,?,?)");
+                    $stmt->execute([$quizId, $form['text'], $form['marks'], $form['difficulty'], $pos]);
                     $thisQid = (int) $pdo->lastInsertId();
                 }
                 $insOpt = $pdo->prepare("INSERT INTO options (question_id, text, is_correct, position) VALUES (?,?,?,?)");
@@ -118,8 +144,16 @@ if ($action === 'new' || $action === 'edit') {
             <label class="form-label">Marks</label>
             <input type="number" class="form-control" name="marks" min="1" max="20" value="<?= (int) $form['marks'] ?>">
           </div>
+          <div class="mb-3" style="max-width:240px">
+            <label class="form-label">Difficulty</label>
+            <select class="form-select" name="difficulty" required>
+              <?php foreach (['Beginner', 'Intermediate'] as $level): ?>
+                <option value="<?= e($level) ?>" <?= $form['difficulty']===$level?'selected':'' ?>><?= e($level) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
           <label class="form-label">Options (mark the correct one)</label>
-          <?php for ($i = 0; $i < max(4, count($form['opts'])); $i++):
+          <?php for ($i = 0; $i < 4; $i++):
             $cur = $form['opts'][$i] ?? ['text'=>'','is_correct'=>0];
           ?>
             <div class="input-group mb-2">
@@ -174,6 +208,7 @@ include __DIR__ . '/_nav.php';
               <div class="flex-grow-1">
                 <strong><?= e($q['text']) ?></strong>
                 <span class="badge bg-light text-dark ms-2"><?= (int) $q['marks'] ?> mark</span>
+                <span class="badge bg-light text-secondary ms-1"><?= e($q['difficulty']) ?></span>
                 <div class="mt-2 small">
                   <?php foreach ($oRows as $o): ?>
                     <span class="badge <?= $o['is_correct']?'bg-success':'bg-secondary' ?> me-1 my-1"><?= e($o['text']) ?><?php if ($o['is_correct']): ?> <i class="bi bi-check-lg"></i><?php endif; ?></span>
@@ -182,7 +217,10 @@ include __DIR__ . '/_nav.php';
               </div>
               <div class="text-nowrap">
                 <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('admin/questions.php?quiz='.$quizId.'&action=edit&id='.(int)$q['id'])) ?>"><i class="bi bi-pencil"></i></a>
-                <a class="btn btn-sm btn-outline-danger" href="<?= e(base_url('admin/questions.php?quiz='.$quizId.'&action=delete&id='.(int)$q['id'].'&csrf_token='.urlencode(csrf_token()))) ?>" data-confirm="Delete this question?"><i class="bi bi-trash"></i></a>
+                <form method="post" action="<?= e(base_url('admin/questions.php?quiz='.$quizId.'&action=delete&id='.(int)$q['id'])) ?>" class="d-inline" data-confirm="Delete this question? Saved questions are protected from deletion.">
+                  <?= csrf_field() ?>
+                  <button class="btn btn-sm btn-outline-danger" type="submit" aria-label="Delete question"><i class="bi bi-trash"></i></button>
+                </form>
               </div>
             </div>
           </li>

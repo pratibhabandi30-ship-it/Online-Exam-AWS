@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/certificates.php';
 
 $me = require_login();
 if ($me['role'] !== 'student') redirect('admin/dashboard.php');
@@ -79,6 +80,7 @@ foreach ($questions as $q) {
 }
 
 $pdo->beginTransaction();
+$certificateId = null;
 try {
     $ins = $pdo->prepare("
         INSERT INTO attempts (user_id, quiz_id, score, total_marks, correct_count, wrong_count, unanswered_count, time_taken_sec, started_at, submitted_at)
@@ -94,6 +96,7 @@ try {
     foreach ($grading as $qid => [$pickedOpt, $isCorrect]) {
         $insAns->execute([$attemptId, $qid, $pickedOpt, $isCorrect ? 1 : 0]);
     }
+    $certificateId = issue_certificate($pdo, $attemptId, (int) $me['id'], $quizId, $score, $totalMarks);
     $pdo->commit();
 } catch (Throwable $e) {
     $pdo->rollBack();
@@ -102,5 +105,5 @@ try {
     redirect('exams.php');
 }
 
-flash('success', 'Exam submitted!');
+flash('success', $certificateId ? 'Exam submitted! You earned a certificate.' : 'Exam submitted!');
 redirect('result.php?id=' . $attemptId);
