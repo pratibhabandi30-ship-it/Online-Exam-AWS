@@ -8,31 +8,30 @@
 
 declare(strict_types=1);
 
-// ---------- Database ----------
-const DB_HOST = '127.0.0.1';
-const DB_PORT = 3306;
-const DB_NAME = 'online_exam_system';
-const DB_USER = 'root';
-const DB_PASS = '';
-const DB_CHARSET = 'utf8mb4';
-
-// ---------- Application ----------
-const APP_NAME       = 'Online Exam System';
-const APP_TAGLINE    = 'A modern, secure platform for college quizzes & exams';
-const APP_TIMEZONE   = 'Asia/Kolkata';
-const APP_DEBUG      = true; // set false in production
-const SESSION_NAME   = 'oes_session';
-const SESSION_LIFETIME = 60 * 60 * 4; // 4 hours
-
-// ---------- Security ----------
-const PASSWORD_ALGO  = PASSWORD_BCRYPT;
-const CSRF_TOKEN_KEY = 'csrf_token';
-
-// Pull local overrides if present
 $local = __DIR__ . '/config.local.php';
 if (is_file($local)) {
     require_once $local;
 }
+
+// ---------- Database ----------
+defined('DB_HOST') || define('DB_HOST', '127.0.0.1');
+defined('DB_PORT') || define('DB_PORT', 3306);
+defined('DB_NAME') || define('DB_NAME', 'online_exam_system');
+defined('DB_USER') || define('DB_USER', 'root');
+defined('DB_PASS') || define('DB_PASS', '');
+defined('DB_CHARSET') || define('DB_CHARSET', 'utf8mb4');
+
+// ---------- Application ----------
+defined('APP_NAME') || define('APP_NAME', 'Online Exam System');
+defined('APP_TAGLINE') || define('APP_TAGLINE', 'A modern, secure platform for college quizzes & exams');
+defined('APP_TIMEZONE') || define('APP_TIMEZONE', 'Asia/Kolkata');
+defined('APP_DEBUG') || define('APP_DEBUG', true);
+defined('SESSION_NAME') || define('SESSION_NAME', 'oes_session');
+defined('SESSION_LIFETIME') || define('SESSION_LIFETIME', 60 * 60 * 4);
+
+// ---------- Security ----------
+defined('PASSWORD_ALGO') || define('PASSWORD_ALGO', PASSWORD_BCRYPT);
+defined('CSRF_TOKEN_KEY') || define('CSRF_TOKEN_KEY', 'csrf_token');
 
 date_default_timezone_set(APP_TIMEZONE);
 
