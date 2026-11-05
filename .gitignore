@@ -2,6 +2,8 @@
 config/config.local.php
 .env
 .env.local
+.env.*
+!.env.example
 *.local
 
 # Uploads
