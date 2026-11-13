@@ -94,33 +94,46 @@ try {
         }
     }
 
-    $blocked = false;
+    // Assigning to second faculty MUST succeed and not overwrite existing assignment:
+    $insertAssignment->execute([$otherFacultyId, $studentIds[0], $otherFacultyId]);
+
+    $assignedFacultiesQuery = $pdo->prepare(
+        'SELECT faculty_id FROM faculty_student_assignments WHERE student_id = ? ORDER BY faculty_id'
+    );
+    $assignedFacultiesQuery->execute([$studentIds[0]]);
+    $faculties = array_map('intval', $assignedFacultiesQuery->fetchAll(PDO::FETCH_COLUMN));
+    $expected = [$facultyId, $otherFacultyId];
+    sort($expected);
+    if ($faculties !== $expected) {
+        throw new RuntimeException('Student is not assigned to both faculty members simultaneously.');
+    }
+
+    // Duplicate assignment between the same faculty and same student must be prevented:
+    $duplicateBlocked = false;
     try {
-        $insertAssignment->execute([$otherFacultyId, $studentIds[0], $otherFacultyId]);
+        $insertAssignment->execute([$facultyId, $studentIds[0], $facultyId]);
     } catch (PDOException $error) {
-        if ($error->getCode() !== '23000') {
+        if ($error->getCode() === '23000') {
+            $duplicateBlocked = true;
+        } else {
             throw $error;
         }
-        $blocked = true;
     }
-    if (!$blocked) {
-        throw new RuntimeException('The unique student assignment did not block a second faculty.');
+    if (!$duplicateBlocked) {
+        throw new RuntimeException('Duplicate assignment between same faculty and student was not prevented.');
     }
 
+    // Removing facultyId's assignment must not remove otherFacultyId's assignment:
     $pdo->prepare('DELETE FROM faculty_student_assignments WHERE faculty_id = ? AND student_id = ?')
         ->execute([$facultyId, $studentIds[0]]);
-    $assignedLookup->execute([$studentIds[0]]);
-    if ($assignedLookup->fetchColumn() !== false) {
-        throw new RuntimeException('The faculty could not unassign their own student.');
+
+    $assignedFacultiesQuery->execute([$studentIds[0]]);
+    $remainingFaculties = array_map('intval', $assignedFacultiesQuery->fetchAll(PDO::FETCH_COLUMN));
+    if ($remainingFaculties !== [$otherFacultyId]) {
+        throw new RuntimeException('Unassigning one faculty did not preserve the other faculty assignment.');
     }
 
-    $insertAssignment->execute([$otherFacultyId, $studentIds[0], $otherFacultyId]);
-    $assignedLookup->execute([$studentIds[0]]);
-    if ((int) $assignedLookup->fetchColumn() !== $otherFacultyId) {
-        throw new RuntimeException('A released student could not be assigned to another faculty.');
-    }
-
-    echo "Faculty directory, student profiles, one-faculty assignment, reassignment, and unassignment checks passed.\n";
+    echo "Faculty directory, student profiles, multiple faculty assignments, duplicate prevention, and independent unassignment checks passed.\n";
 } finally {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();

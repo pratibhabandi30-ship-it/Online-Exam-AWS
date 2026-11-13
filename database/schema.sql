@@ -76,8 +76,9 @@ CREATE TABLE `faculty_student_assignments` (
   `assigned_by` INT UNSIGNED DEFAULT NULL,
   `assigned_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_assignment_student` (`student_id`),
+  UNIQUE KEY `uniq_faculty_student` (`faculty_id`, `student_id`),
   KEY `idx_assignment_faculty` (`faculty_id`),
+  KEY `idx_assignment_student` (`student_id`),
   CONSTRAINT `fk_assignment_faculty` FOREIGN KEY (`faculty_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_assignment_student` FOREIGN KEY (`student_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_assignment_admin` FOREIGN KEY (`assigned_by`) REFERENCES `users`(`id`) ON DELETE SET NULL

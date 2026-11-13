@@ -45,13 +45,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "SELECT aa.id AS answer_id, q.marks AS question_marks
                  FROM attempts a
                  JOIN exam_assigned_students eas ON eas.quiz_id = a.quiz_id AND eas.student_id = a.user_id
-                 JOIN faculty_student_assignments fsa ON fsa.student_id = a.user_id AND fsa.faculty_id = ?
                  JOIN questions q ON q.quiz_id = a.quiz_id AND q.id = ?
                  JOIN attempt_answers aa ON aa.attempt_id = a.id AND aa.question_id = q.id
                  WHERE a.id = ? AND a.quiz_id = ? AND q.question_type = 'coding'
                  FOR UPDATE"
             );
-            $submission->execute([$facultyId, $questionId, $attemptId, $quizId]);
+            $submission->execute([$questionId, $attemptId, $quizId]);
             $codeAnswer = $submission->fetch();
             if (!$codeAnswer || $marks === false || $marks < 0 || $marks > (int) $codeAnswer['question_marks']) {
                 throw new InvalidArgumentException('Enter a mark from zero up to the coding question maximum for an assigned student’s answer.');
@@ -98,23 +97,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pendingCoding = $pdo->prepare(
             "SELECT COUNT(*)
              FROM exam_assigned_students eas
-             JOIN faculty_student_assignments fsa ON fsa.faculty_id = ? AND fsa.student_id = eas.student_id
              JOIN attempts a ON a.quiz_id = eas.quiz_id AND a.user_id = eas.student_id
              JOIN questions q ON q.quiz_id = a.quiz_id AND q.question_type = 'coding'
              LEFT JOIN attempt_answers aa ON aa.attempt_id = a.id AND aa.question_id = q.id
              WHERE eas.quiz_id = ? AND (aa.id IS NULL OR aa.awarded_marks IS NULL)"
         );
-        $pendingCoding->execute([$facultyId, $quizId]);
+        $pendingCoding->execute([$quizId]);
         if ((int) $pendingCoding->fetchColumn() > 0) {
             throw new InvalidArgumentException('Grade every submitted coding answer before sending results to the HOD.');
         }
         $attemptCount = $pdo->prepare(
             'SELECT COUNT(*) FROM attempts a
              JOIN exam_assigned_students eas ON eas.quiz_id = a.quiz_id AND eas.student_id = a.user_id
-             JOIN faculty_student_assignments fsa ON fsa.faculty_id = ? AND fsa.student_id = a.user_id
              WHERE a.quiz_id = ?'
         );
-        $attemptCount->execute([$facultyId, $quizId]);
+        $attemptCount->execute([$quizId]);
         if ((int) $attemptCount->fetchColumn() < 1) {
             throw new InvalidArgumentException('There are no submitted attempts to send for result approval.');
         }
@@ -159,8 +156,7 @@ $stmt = $pdo->prepare(
      FROM exam_workflows w JOIN quizzes q ON q.id = w.quiz_id
      LEFT JOIN result_publications rp ON rp.quiz_id = q.id
      LEFT JOIN exam_assigned_students eas ON eas.quiz_id = q.id
-     LEFT JOIN faculty_student_assignments fsa ON fsa.faculty_id = w.faculty_id AND fsa.student_id = eas.student_id
-     LEFT JOIN attempts a ON a.quiz_id = q.id AND a.user_id = eas.student_id AND fsa.student_id IS NOT NULL
+     LEFT JOIN attempts a ON a.quiz_id = q.id AND a.user_id = eas.student_id
      WHERE w.faculty_id = ? AND w.status IN ('published','completed')
      GROUP BY q.id, q.title, w.status, w.scheduled_end, w.result_status, w.result_remarks,
               w.result_requested_at, rp.published_at
@@ -192,13 +188,12 @@ include __DIR__ . '/_nav.php';
       };
       $pendingCodingQuery = $pdo->prepare(
           "SELECT COUNT(*) FROM exam_assigned_students eas
-         JOIN faculty_student_assignments fsa ON fsa.faculty_id = ? AND fsa.student_id = eas.student_id
-         JOIN attempts a ON a.quiz_id = eas.quiz_id AND a.user_id = eas.student_id
+           JOIN attempts a ON a.quiz_id = eas.quiz_id AND a.user_id = eas.student_id
            JOIN questions q ON q.quiz_id = a.quiz_id AND q.question_type = 'coding'
            LEFT JOIN attempt_answers aa ON aa.attempt_id = a.id AND aa.question_id = q.id
            WHERE eas.quiz_id = ? AND (aa.id IS NULL OR aa.awarded_marks IS NULL)"
       );
-      $pendingCodingQuery->execute([$facultyId, (int) $exam['quiz_id']]);
+      $pendingCodingQuery->execute([(int) $exam['quiz_id']]);
       $hasPendingCoding = (int) $pendingCodingQuery->fetchColumn() > 0;
     ?>
       <tr>
@@ -222,11 +217,10 @@ include __DIR__ . '/_nav.php';
             'SELECT a.id, a.score, a.total_marks, a.submitted_at, u.name, u.email
              FROM attempts a
              JOIN exam_assigned_students eas ON eas.quiz_id = a.quiz_id AND eas.student_id = a.user_id
-             JOIN faculty_student_assignments fsa ON fsa.faculty_id = ? AND fsa.student_id = a.user_id
              JOIN users u ON u.id = a.user_id
              WHERE a.quiz_id = ? ORDER BY a.submitted_at DESC'
         );
-        $attemptsQuery->execute([$facultyId, (int) $exam['quiz_id']]);
+        $attemptsQuery->execute([(int) $exam['quiz_id']]);
         $examAttempts = $attemptsQuery->fetchAll();
         $codingQuery = $pdo->prepare(
             "SELECT q.id AS question_id, q.text, q.marks, q.programming_language,

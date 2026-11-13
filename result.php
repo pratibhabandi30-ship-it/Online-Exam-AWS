@@ -26,15 +26,17 @@ if (!$att) { flash('error','Attempt not found.'); redirect('history.php'); }
 $isOwner = (int) $att['user_id'] === (int) $me['id'];
 $isHod = $me['role'] === 'admin';
 $isAssignedFaculty = false;
-if ($me['role'] === 'faculty' && (int) $att['faculty_id'] === (int) $me['id']) {
-    $assignedQuery = $pdo->prepare(
-        'SELECT COUNT(*) FROM exam_assigned_students eas
-         JOIN faculty_student_assignments fsa
-           ON fsa.faculty_id = ? AND fsa.student_id = eas.student_id
-         WHERE eas.quiz_id = ? AND eas.student_id = ?'
-    );
-    $assignedQuery->execute([(int) $me['id'], (int) $att['quiz_id'], (int) $att['user_id']]);
-    $isAssignedFaculty = (int) $assignedQuery->fetchColumn() > 0;
+if ($me['role'] === 'faculty') {
+    if ($att['faculty_id'] !== null && (int) $att['faculty_id'] === (int) $me['id']) {
+        $isAssignedFaculty = true;
+    } else {
+        $assignedQuery = $pdo->prepare(
+            'SELECT COUNT(*) FROM faculty_student_assignments fsa
+             WHERE fsa.faculty_id = ? AND fsa.student_id = ?'
+        );
+        $assignedQuery->execute([(int) $me['id'], (int) $att['user_id']]);
+        $isAssignedFaculty = (int) $assignedQuery->fetchColumn() > 0;
+    }
 }
 if (!$isOwner && !$isHod && !$isAssignedFaculty) {
     flash('error','You are not allowed to view this attempt.');

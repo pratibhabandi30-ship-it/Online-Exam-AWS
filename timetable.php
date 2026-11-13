@@ -33,13 +33,12 @@ $eventsQuery = $pdo->prepare(
          JOIN quizzes q ON q.id = w.quiz_id AND q.is_published = 1
          JOIN users u ON u.id = w.faculty_id
          JOIN exam_assigned_students eas ON eas.quiz_id = q.id AND eas.student_id = ?
-         JOIN faculty_student_assignments fsa ON fsa.faculty_id = w.faculty_id AND fsa.student_id = ?
          WHERE w.status = 'published' AND w.scheduled_end >= NOW()
      ) upcoming
      ORDER BY starts_at, event_id
      LIMIT 100"
 );
-$eventsQuery->execute([$studentId, $studentId, $studentId]);
+$eventsQuery->execute([$studentId, $studentId]);
 $events = $eventsQuery->fetchAll();
 
 $pageTitle = 'My Timetable';

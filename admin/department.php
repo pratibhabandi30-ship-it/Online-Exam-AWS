@@ -212,18 +212,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$student->fetchColumn()) {
                 throw new InvalidArgumentException('Select an active student.');
             }
+            $alreadyAssigned = $pdo->prepare(
+                'SELECT 1 FROM faculty_student_assignments WHERE faculty_id = ? AND student_id = ?'
+            );
+            $alreadyAssigned->execute([$facultyId, $studentId]);
+            if ($alreadyAssigned->fetchColumn()) {
+                throw new InvalidArgumentException('This student is already assigned to the selected faculty member.');
+            }
             $assignedCount = $pdo->prepare('SELECT COUNT(*) FROM faculty_student_assignments WHERE faculty_id = ?');
             $assignedCount->execute([$facultyId]);
             $currentCount = (int) $assignedCount->fetchColumn();
-            $oldFaculty = $pdo->prepare('SELECT faculty_id FROM faculty_student_assignments WHERE student_id = ? FOR UPDATE');
-            $oldFaculty->execute([$studentId]);
-            $oldFacultyId = $oldFaculty->fetchColumn();
-            if ((int) $oldFacultyId !== $facultyId && $currentCount >= (int) $facultyRow['max_students']) {
+            if ($currentCount >= (int) $facultyRow['max_students']) {
                 throw new InvalidArgumentException('This faculty member has reached their configured student capacity.');
             }
             $pdo->prepare(
                 'INSERT INTO faculty_student_assignments (faculty_id, student_id, assigned_by) VALUES (?, ?, ?)
-                 ON DUPLICATE KEY UPDATE faculty_id = VALUES(faculty_id), assigned_by = VALUES(assigned_by), assigned_at = CURRENT_TIMESTAMP'
+                 ON DUPLICATE KEY UPDATE assigned_by = VALUES(assigned_by), assigned_at = CURRENT_TIMESTAMP'
             )->execute([$facultyId, $studentId, (int) $hod['id']]);
             $pdo->prepare(
                 'INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)'
@@ -235,18 +239,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($action === 'unassign_student') {
             $studentId = (int) ($_POST['student_id'] ?? 0);
+            $facultyId = (int) ($_POST['faculty_id'] ?? 0);
             $pdo->beginTransaction();
             $student = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'student' FOR UPDATE");
             $student->execute([$studentId]);
             if (!$student->fetchColumn()) {
                 throw new InvalidArgumentException('The selected student was not found.');
             }
-            $pdo->prepare('DELETE FROM faculty_student_assignments WHERE student_id = ?')->execute([$studentId]);
+            if ($facultyId > 0) {
+                $pdo->prepare('DELETE FROM faculty_student_assignments WHERE student_id = ? AND faculty_id = ?')
+                    ->execute([$studentId, $facultyId]);
+            } else {
+                $pdo->prepare('DELETE FROM faculty_student_assignments WHERE student_id = ?')->execute([$studentId]);
+            }
             $pdo->prepare(
-                'INSERT INTO audit_logs (actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
-            )->execute([(int) $hod['id'], 'student.unassigned', 'student', (string) $studentId]);
+                'INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)'
+            )->execute([
+                (int) $hod['id'],
+                'student.unassigned',
+                'student',
+                (string) $studentId,
+                $facultyId > 0 ? 'faculty_id=' . $facultyId : 'all_faculty',
+            ]);
             $pdo->commit();
-            flash('success', 'Student unassigned.');
+            flash('success', 'Student assignment updated.');
             redirect('admin/department.php');
         }
 
@@ -303,12 +319,9 @@ $faculty = $pdo->query(
      GROUP BY u.id ORDER BY u.name"
 )->fetchAll();
 $students = $pdo->query(
-    "SELECT u.id, u.name, u.email, u.is_active, sp.registration_no, sp.branch, sp.semester, sp.academic_year,
-            fa.faculty_id, f.name AS faculty_name
+    "SELECT u.id, u.name, u.email, u.is_active, sp.registration_no, sp.branch, sp.semester, sp.academic_year
      FROM users u
      LEFT JOIN student_profiles sp ON sp.user_id = u.id
-     LEFT JOIN faculty_student_assignments fa ON fa.student_id = u.id
-     LEFT JOIN users f ON f.id = fa.faculty_id
      WHERE u.role = 'student'
        AND NOT EXISTS (
            SELECT 1 FROM audit_logs al
@@ -317,7 +330,21 @@ $students = $pdo->query(
        )
      ORDER BY u.name"
 )->fetchAll();
-$unassignedStudents = array_values(array_filter($students, static fn(array $student): bool => empty($student['faculty_id']) && (int) $student['is_active'] === 1));
+
+$allAssignments = $pdo->query(
+    "SELECT fsa.student_id, fsa.faculty_id, f.name AS faculty_name
+     FROM faculty_student_assignments fsa
+     JOIN users f ON f.id = fsa.faculty_id
+     ORDER BY f.name"
+)->fetchAll();
+
+$studentAssignments = [];
+foreach ($allAssignments as $asgn) {
+    $studentAssignments[(int) $asgn['student_id']][] = [
+        'faculty_id' => (int) $asgn['faculty_id'],
+        'faculty_name' => $asgn['faculty_name'],
+    ];
+}
 
 $pageTitle = 'HOD · Department management';
 include __DIR__ . '/../includes/header.php';
@@ -378,10 +405,23 @@ include __DIR__ . '/_nav.php';
         <h5>Assign a student to faculty</h5>
         <form method="post" class="row g-3 align-items-end">
           <?= csrf_field() ?><input type="hidden" name="action" value="assign_student">
-          <div class="col-md-5"><label class="form-label">Unassigned student</label>
+          <div class="col-md-5"><label class="form-label">Student</label>
             <select class="form-select" name="student_id" required>
               <option value="">Select student</option>
-              <?php foreach ($unassignedStudents as $student): ?><option value="<?= (int) $student['id'] ?>"><?= e($student['name'] . ($student['registration_no'] ? ' · ' . $student['registration_no'] : '')) ?></option><?php endforeach; ?>
+              <?php foreach ($students as $student):
+                if (!(int) $student['is_active']) continue;
+                $asgns = $studentAssignments[(int) $student['id']] ?? [];
+                $asgnCount = count($asgns);
+                $extra = $student['registration_no'] ? ' · ' . $student['registration_no'] : '';
+                if ($asgnCount > 0) {
+                    $names = implode(', ', array_column($asgns, 'faculty_name'));
+                    $extra .= ' (Assigned: ' . $names . ')';
+                } else {
+                    $extra .= ' (Unassigned)';
+                }
+              ?>
+                <option value="<?= (int) $student['id'] ?>"><?= e($student['name'] . $extra) ?></option>
+              <?php endforeach; ?>
             </select>
           </div>
           <div class="col-md-5"><label class="form-label">Faculty</label>
@@ -420,16 +460,39 @@ include __DIR__ . '/_nav.php';
     <h5 class="px-2 pt-2">Students</h5>
     <div class="table-responsive"><table class="table align-middle mb-0">
       <thead><tr><th>Student</th><th>Registration</th><th>Branch / semester</th><th>Assigned faculty</th><th>Status</th><th></th></tr></thead><tbody>
-      <?php foreach ($students as $student): ?><tr>
+      <?php foreach ($students as $student):
+        $asgns = $studentAssignments[(int) $student['id']] ?? [];
+      ?><tr>
         <td><?= e($student['name']) ?><div class="small text-muted"><?= e($student['email']) ?></div></td>
         <td><?= e($student['registration_no'] ?: '—') ?></td>
         <td><?= e(($student['branch'] ?: '—') . ($student['semester'] ? ' · Sem ' . $student['semester'] : '')) ?></td>
-        <td><?= e($student['faculty_name'] ?: 'Unassigned') ?></td>
+        <td>
+          <?php if (!$asgns): ?>
+            <span class="badge bg-secondary">Unassigned</span>
+          <?php else: ?>
+            <div class="d-flex flex-wrap gap-1">
+              <?php foreach ($asgns as $asgn): ?>
+                <span class="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
+                  <i class="bi bi-person"></i> <?= e($asgn['faculty_name']) ?>
+                  <form method="post" class="d-inline" data-unassign-faculty-confirm data-student-name="<?= e($student['name']) ?>" data-faculty-name="<?= e($asgn['faculty_name']) ?>">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="unassign_student">
+                    <input type="hidden" name="student_id" value="<?= (int) $student['id'] ?>">
+                    <input type="hidden" name="faculty_id" value="<?= (int) $asgn['faculty_id'] ?>">
+                    <button type="submit" class="btn btn-link btn-sm p-0 text-danger" title="Unassign <?= e($student['name']) ?> from <?= e($asgn['faculty_name']) ?>" style="line-height: 1; font-size: 0.85rem;"><i class="bi bi-x-circle-fill"></i></button>
+                  </form>
+                </span>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </td>
         <td><span class="badge bg-<?= $student['is_active'] ? 'success' : 'secondary' ?>"><?= $student['is_active'] ? 'Active' : 'Inactive' ?></span></td>
         <td class="text-end">
           <a class="btn btn-sm btn-outline-secondary" href="<?= e(base_url('admin/department.php?edit=' . (int) $student['id'])) ?>">Edit</a>
           <form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="action" value="toggle_user"><input type="hidden" name="id" value="<?= (int) $student['id'] ?>"><button class="btn btn-sm btn-outline-secondary" type="submit"><?= $student['is_active'] ? 'Deactivate' : 'Activate' ?></button></form>
-          <?php if (!empty($student['faculty_id'])): ?><form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="action" value="unassign_student"><input type="hidden" name="student_id" value="<?= (int) $student['id'] ?>"><button class="btn btn-sm btn-outline-danger" type="submit">Unassign</button></form><?php endif; ?>
+          <?php if (!empty($asgns)): ?>
+            <form method="post" class="d-inline" data-unassign-all-confirm data-student-name="<?= e($student['name']) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="unassign_student"><input type="hidden" name="student_id" value="<?= (int) $student['id'] ?>"><button class="btn btn-sm btn-outline-danger" type="submit" title="Unassign from all faculty">Unassign All</button></form>
+          <?php endif; ?>
           <form method="post" class="d-inline" data-delete-confirm data-delete-name="<?= e($student['name']) ?>" data-delete-email="<?= e($student['email']) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="delete_user"><input type="hidden" name="id" value="<?= (int) $student['id'] ?>"><input type="hidden" name="confirm_delete" value=""><button class="btn btn-sm btn-danger" type="submit" aria-label="Delete student account for <?= e($student['name']) ?>">Delete</button></form>
         </td>
       </tr><?php endforeach; ?>
@@ -476,6 +539,25 @@ include __DIR__ . '/_nav.php';
   });
   deleteDialog.addEventListener('close', () => {
     pendingDeleteForm = null;
+  });
+
+  document.querySelectorAll('form[data-unassign-faculty-confirm]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      const studentName = form.dataset.studentName || 'this student';
+      const facultyName = form.dataset.facultyName || 'this faculty';
+      if (!window.confirm(`Unassign ${studentName} from ${facultyName}?`)) {
+        event.preventDefault();
+      }
+    });
+  });
+
+  document.querySelectorAll('form[data-unassign-all-confirm]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      const studentName = form.dataset.studentName || 'this student';
+      if (!window.confirm(`Unassign ${studentName} from all assigned faculty?`)) {
+        event.preventDefault();
+      }
+    });
   });
 
   const role = document.getElementById('accountRole');

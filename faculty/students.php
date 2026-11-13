@@ -95,13 +95,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new InvalidArgumentException('Deleted student accounts cannot be assigned.');
             }
 
-            $existingAssignments = $pdo->prepare(
+            $alreadyAssignedQuery = $pdo->prepare(
                 "SELECT student_id FROM faculty_student_assignments
-                 WHERE student_id IN ($placeholders) ORDER BY student_id"
+                 WHERE faculty_id = ? AND student_id IN ($placeholders) ORDER BY student_id"
             );
-            $existingAssignments->execute($studentIds);
-            if ($existingAssignments->fetchAll(PDO::FETCH_COLUMN)) {
-                throw new InvalidArgumentException('At least one selected student is already assigned. Refresh the directory and try again.');
+            $alreadyAssignedQuery->execute(array_merge([$facultyId], $studentIds));
+            $alreadyAssignedIds = array_map('intval', $alreadyAssignedQuery->fetchAll(PDO::FETCH_COLUMN));
+            $newStudentIds = array_values(array_diff($studentIds, $alreadyAssignedIds));
+
+            if (!$newStudentIds) {
+                throw new InvalidArgumentException('All selected students are already assigned to you.');
             }
 
             $capacityQuery = $pdo->prepare(
@@ -111,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             $capacityQuery->execute([$facultyId]);
             $currentCount = (int) $capacityQuery->fetchColumn();
-            if ($currentCount + count($studentIds) > (int) $facultyProfile['max_students']) {
+            if ($currentCount + count($newStudentIds) > (int) $facultyProfile['max_students']) {
                 throw new InvalidArgumentException(
                     'This selection exceeds your capacity of ' . (int) $facultyProfile['max_students'] . ' assigned students.'
                 );
@@ -119,13 +122,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $insert = $pdo->prepare(
                 'INSERT INTO faculty_student_assignments (faculty_id, student_id, assigned_by)
-                 VALUES (?, ?, ?)'
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE assigned_by = VALUES(assigned_by), assigned_at = CURRENT_TIMESTAMP'
             );
             $audit = $pdo->prepare(
                 'INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details)
                  VALUES (?, ?, ?, ?, ?)'
             );
-            foreach ($studentIds as $studentId) {
+            foreach ($newStudentIds as $studentId) {
                 $insert->execute([$facultyId, $studentId, $facultyId]);
                 $audit->execute([
                     $facultyId,
@@ -137,7 +141,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
-            flash('success', count($studentIds) . ' student' . (count($studentIds) === 1 ? ' was' : 's were') . ' assigned to you.');
+            $msg = count($newStudentIds) . ' student' . (count($newStudentIds) === 1 ? ' was' : 's were') . ' assigned to you.';
+            if (count($alreadyAssignedIds) > 0) {
+                $msg .= ' (' . count($alreadyAssignedIds) . ' already assigned).';
+            }
+            flash('success', $msg);
             redirect('faculty/students.php' . ($branchFilter !== '' || $semesterFilter !== '' || $search !== '' ? '?' . http_build_query([
                 'q' => $search,
                 'branch' => $branchFilter,
@@ -194,7 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         error_log('Faculty student assignment failed: ' . $error->getMessage());
         $errors[] = $error->getCode() === '23000'
-            ? 'A selected student was assigned by another faculty member. Refresh the directory and try again.'
+            ? 'Selected student assignment could not be updated. Refresh the directory and try again.'
             : 'Student assignments could not be updated. Please try again.';
     } catch (Throwable $error) {
         if ($pdo->inTransaction()) {
@@ -205,16 +213,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$view = clean_string(is_string($_GET['view'] ?? null) ? $_GET['view'] : 'all', 20);
+if (!in_array($view, ['all', 'mine'], true)) {
+    $view = 'all';
+}
+
 $sql =
     "SELECT u.id, u.name, u.email, u.college, u.is_active,
             sp.registration_no, sp.branch, sp.semester, sp.academic_year,
-            assigned.faculty_id AS assigned_faculty_id, assigned_faculty.name AS assigned_faculty_name,
+            EXISTS (
+                SELECT 1 FROM faculty_student_assignments my_fsa
+                WHERE my_fsa.faculty_id = ? AND my_fsa.student_id = u.id
+            ) AS is_assigned_to_me,
+            (
+                SELECT GROUP_CONCAT(f.name ORDER BY f.name SEPARATOR ', ')
+                FROM faculty_student_assignments fsa
+                JOIN users f ON f.id = fsa.faculty_id
+                WHERE fsa.student_id = u.id
+            ) AS assigned_faculty_names,
             COALESCE(performance.attempts, 0) AS attempts,
             performance.average_percent, performance.best_percent
      FROM users u
      LEFT JOIN student_profiles sp ON sp.user_id = u.id
-     LEFT JOIN faculty_student_assignments assigned ON assigned.student_id = u.id
-     LEFT JOIN users assigned_faculty ON assigned_faculty.id = assigned.faculty_id
      LEFT JOIN (
          SELECT fsa.student_id, COUNT(DISTINCT a.id) AS attempts,
                 AVG(CASE WHEN a.total_marks > 0 THEN a.score * 100.0 / a.total_marks END) AS average_percent,
@@ -233,7 +253,11 @@ $sql =
            WHERE deleted.action = 'account.deleted' AND deleted.entity_type = 'student'
              AND deleted.entity_id = CAST(u.id AS CHAR)
        )";
-$params = [$facultyId];
+$params = [$facultyId, $facultyId];
+if ($view === 'mine') {
+    $sql .= ' AND EXISTS (SELECT 1 FROM faculty_student_assignments fsa_mine WHERE fsa_mine.faculty_id = ? AND fsa_mine.student_id = u.id)';
+    $params[] = $facultyId;
+}
 if ($search !== '') {
     $sql .= ' AND (u.name LIKE ? OR u.email LIKE ? OR sp.registration_no LIKE ?)';
     $term = '%' . $search . '%';
@@ -261,34 +285,45 @@ include __DIR__ . '/_nav.php';
 ?>
 <div class="container py-4">
   <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
-    <div><h2 class="mb-1">Student directory</h2><p class="text-muted mb-0">Browse registered students, filter the directory, and assign unassigned students to yourself.</p></div>
+    <div><h2 class="mb-1">Student directory</h2><p class="text-muted mb-0">Browse registered students, filter the directory, and assign students to yourself.</p></div>
     <a class="btn btn-outline-primary" href="<?= e(base_url('faculty/attendance.php')) ?>"><i class="bi bi-calendar2-check"></i> Manage attendance</a>
   </div>
   <?php foreach ($errors as $error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endforeach; ?>
   <?php if ($message = flash('success')): ?><div class="alert alert-success"><?= e($message) ?></div><?php endif; ?>
 
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item">
+      <a class="nav-link <?= $view !== 'mine' ? 'active' : '' ?>" href="<?= e(base_url('faculty/students.php?' . http_build_query(array_merge($_GET, ['view' => 'all'])))) ?>"><i class="bi bi-people"></i> All Students</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <?= $view === 'mine' ? 'active' : '' ?>" href="<?= e(base_url('faculty/students.php?' . http_build_query(array_merge($_GET, ['view' => 'mine'])))) ?>"><i class="bi bi-person-check"></i> My Assigned Students</a>
+    </li>
+  </ul>
+
   <form method="get" class="card p-3 mb-3">
+    <input type="hidden" name="view" value="<?= e($view) ?>">
     <div class="row g-2 align-items-end">
       <div class="col-md-5"><label class="form-label" for="studentSearch">Search students</label><input class="form-control" id="studentSearch" type="search" name="q" value="<?= e($search) ?>" placeholder="Name, email or registration number"></div>
       <div class="col-md-3"><label class="form-label" for="branchFilter">Branch</label><select class="form-select" id="branchFilter" name="branch"><option value="">All branches</option><?php foreach ($branches as $branch): ?><option value="<?= e($branch) ?>" <?= $branchFilter === $branch ? 'selected' : '' ?>><?= e($branch) ?></option><?php endforeach; ?></select></div>
       <div class="col-md-2"><label class="form-label" for="semesterFilter">Semester</label><select class="form-select" id="semesterFilter" name="semester"><option value="">All semesters</option><?php for ($term = 1; $term <= 12; $term++): ?><option value="<?= $term ?>" <?= $semesterFilter === (string) $term ? 'selected' : '' ?>><?= $term ?></option><?php endfor; ?></select></div>
-      <div class="col-md-2 d-flex gap-2"><button class="btn btn-outline-primary flex-fill" type="submit">Filter</button><a class="btn btn-outline-secondary" href="<?= e(base_url('faculty/students.php')) ?>">Reset</a></div>
+      <div class="col-md-2 d-flex gap-2"><button class="btn btn-outline-primary flex-fill" type="submit">Filter</button><a class="btn btn-outline-secondary" href="<?= e(base_url('faculty/students.php?view=' . urlencode($view))) ?>">Reset</a></div>
     </div>
   </form>
 
   <form method="post" id="assignStudentsForm" class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <?= csrf_field() ?><input type="hidden" name="action" value="assign_students">
     <button class="btn btn-primary" type="submit" data-assign-submit disabled><i class="bi bi-person-check"></i> Assign to Me</button>
-    <span class="small text-muted"><span data-selection-count>0</span> unassigned students selected</span>
+    <span class="small text-muted"><span data-selection-count>0</span> students selected</span>
   </form>
 
   <div class="card p-3"><div class="table-responsive"><table class="table align-middle mb-0">
     <thead><tr><th>Select</th><th>Student</th><th>Email</th><th>Registration</th><th>Branch</th><th>Semester</th><th>Academic year</th><th>Faculty assignment</th><th>Attempts</th><th>Average</th><th>Best</th><th></th></tr></thead>
     <tbody><?php foreach ($students as $student):
       $studentId = (int) $student['id'];
-      $isAssignedToMe = (int) ($student['assigned_faculty_id'] ?? 0) === $facultyId;
-      $isUnassigned = empty($student['assigned_faculty_id']);
-      $selectable = $isUnassigned && (int) $student['is_active'] === 1;
+      $isAssignedToMe = (bool) $student['is_assigned_to_me'];
+      $assignedFacultyNames = trim((string) ($student['assigned_faculty_names'] ?? ''));
+      $hasAssignments = $assignedFacultyNames !== '';
+      $selectable = (int) $student['is_active'] === 1;
     ?><tr>
       <td><?php if ($selectable): ?><input class="form-check-input" type="checkbox" name="student_ids[]" value="<?= $studentId ?>" form="assignStudentsForm" data-student-selection aria-label="Select <?= e($student['name']) ?>"><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
       <td><?= e($student['name']) ?><?php if (!(int) $student['is_active']): ?><div><span class="badge bg-secondary">Inactive</span></div><?php endif; ?></td>
@@ -297,14 +332,24 @@ include __DIR__ . '/_nav.php';
       <td><?= e($student['branch'] ?: '—') ?></td>
       <td><?= e($student['semester'] ? (string) $student['semester'] : '—') ?></td>
       <td><?= e($student['academic_year'] ?: '—') ?></td>
-      <td><?php if ($isUnassigned): ?><span class="badge bg-secondary">Unassigned</span><?php else: ?><span class="badge bg-success">Assigned</span><div class="small text-muted"><?= e($student['assigned_faculty_name'] ?: 'Faculty') ?></div><?php endif; ?></td>
+      <td>
+        <?php if (!$hasAssignments): ?>
+          <span class="badge bg-secondary">Unassigned</span>
+        <?php else: ?>
+          <span class="badge bg-success">Assigned</span>
+          <div class="small text-muted mt-1"><i class="bi bi-person-badge"></i> <?= e($assignedFacultyNames) ?></div>
+        <?php endif; ?>
+        <?php if ($isAssignedToMe): ?>
+          <div><span class="badge bg-primary mt-1"><i class="bi bi-check2"></i> Assigned to you</span></div>
+        <?php endif; ?>
+      </td>
       <td><?= (int) $student['attempts'] ?></td>
       <td><?= $student['average_percent'] !== null ? number_format((float) $student['average_percent'], 1) . '%' : '—' ?></td>
       <td><?= $student['best_percent'] !== null ? number_format((float) $student['best_percent'], 1) . '%' : '—' ?></td>
       <td><?php if ($isAssignedToMe): ?><form method="post" class="d-inline" data-unassign-confirm data-student-name="<?= e($student['name']) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="unassign_student"><input type="hidden" name="student_id" value="<?= $studentId ?>"><button class="btn btn-sm btn-outline-danger" type="submit">Unassign</button></form><?php endif; ?></td>
     </tr><?php endforeach; ?></tbody>
   </table></div>
-  <?php if (!$students): ?><div class="text-center text-muted py-5">No students match these filters.</div><?php endif; ?>
+  <?php if (!$students): ?><div class="text-center text-muted py-5"><?= $view === 'mine' ? 'No students are currently assigned to you.' : 'No students match these filters.' ?></div><?php endif; ?>
   </div>
 </div>
 <script>
