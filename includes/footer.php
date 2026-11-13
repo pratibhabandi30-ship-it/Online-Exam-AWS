@@ -7,7 +7,6 @@
           <span><i class="bi bi-mortarboard-fill"></i></span><?= e(APP_NAME) ?>
         </a>
         <p class="home-footer-description">A thoughtful, secure examination platform to help students build confidence, track their growth, and make every achievement count.</p>
-        <a class="home-footer-email" href="mailto:aashish@marketdoctorsonline.com"><i class="bi bi-envelope"></i> aashish@marketdoctorsonline.com</a>
       </div>
       <div class="col-6 col-lg-2">
         <h2 class="home-footer-heading">Explore</h2>
@@ -36,8 +35,7 @@
         <a class="home-footer-register" href="<?= e(base_url('register.php')) ?>">Create student account <i class="bi bi-arrow-up-right"></i></a>
       </div>
     </div>
-    <div class="home-footer-bottom">
-      <span>&copy; <?= date('Y') ?> <strong><?= e(APP_NAME) ?></strong>. All rights reserved.</span>
+    <div class="home-footer-bottom justify-content-end">
       <span>Learning, measured with purpose.</span>
     </div>
   </div>
@@ -52,9 +50,6 @@
           <span class="fw-bold fs-5"><?= e(APP_NAME) ?></span>
         </div>
         <p class="text-muted small mb-3">A modern, secure platform for college quizzes &amp; exams. Free to use, learn from, and extend for your own projects.</p>
-        <a class="text-decoration-none small d-inline-flex align-items-center gap-1" href="mailto:aashish@marketdoctorsonline.com">
-          <i class="bi bi-envelope-fill"></i> aashish@marketdoctorsonline.com
-        </a>
       </div>
 
       <div class="col-6 col-lg-3">
@@ -91,12 +86,7 @@
 
     <hr class="my-3 opacity-25">
 
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small text-muted">
-      <div>
-        &copy; <?= date('Y') ?> <strong><?= e(APP_NAME) ?></strong> &middot; Crafted by
-        <a class="text-decoration-none fw-semibold" href="https://github.com/aashishbharti04" target="_blank" rel="noopener">Aashish Bharti</a>.
-        All rights reserved.
-      </div>
+    <div class="d-flex flex-wrap justify-content-end align-items-center gap-2 small text-muted">
       <div>
         Licensed under <a class="text-decoration-none" href="https://github.com/aashishbharti04/online-exam-system/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
         &middot;

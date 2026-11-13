@@ -362,11 +362,10 @@ include __DIR__ . '/includes/header.php';
         <div class="home-support-copy">
           <span class="home-section-kicker">Here when you need us</span>
           <h2>Contact and <span class="home-gradient-text">support.</span></h2>
-          <p>For platform questions or assistance, email the support contact or send a message through the feedback form.</p>
+          <p>For platform questions or assistance, send a message through the feedback form.</p>
         </div>
         <div class="home-support-actions">
-          <a class="btn btn-primary" href="mailto:aashish@marketdoctorsonline.com"><i class="bi bi-envelope me-1"></i> Email support</a>
-          <a class="btn btn-outline-primary" href="<?= e(base_url('feedback.php')) ?>"><i class="bi bi-chat-dots me-1"></i> Send feedback</a>
+          <a class="btn btn-primary" href="<?= e(base_url('feedback.php')) ?>"><i class="bi bi-chat-dots me-1"></i> Send feedback</a>
         </div>
       </div>
     </div>
