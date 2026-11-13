@@ -33,9 +33,9 @@ $search = isset($_GET['q']) && is_string($_GET['q']) ? clean_string($_GET['q'], 
 $level = isset($_GET['level']) && is_string($_GET['level']) ? clean_string($_GET['level'], 12) : '';
 $page = isset($_GET['page']) && is_scalar($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
 $perPage = 50;
-$allowedLevels = ['Silver', 'Gold', 'Platinum'];
+$allowedLevels = ['Silver', 'Gold'];
 
-$stats = ['total' => 0, 'Silver' => 0, 'Gold' => 0, 'Platinum' => 0];
+$stats = ['total' => 0, 'Silver' => 0, 'Gold' => 0];
 foreach ($pdo->query("SELECT certificate_type, COUNT(*) AS amount FROM certificates WHERE status = 'issued' GROUP BY certificate_type") as $row) {
     $stats[$row['certificate_type']] = (int) $row['amount'];
     $stats['total'] += (int) $row['amount'];
@@ -94,9 +94,8 @@ include __DIR__ . '/_nav.php';
       ['Total issued', $stats['total'], 'bi-award', 'primary'],
       ['Silver', $stats['Silver'], 'bi-award-fill', 'secondary'],
       ['Gold', $stats['Gold'], 'bi-award-fill', 'warning'],
-      ['Platinum', $stats['Platinum'], 'bi-award-fill', 'info'],
     ] as [$label, $amount, $icon, $color]): ?>
-      <div class="col-6 col-lg-3"><div class="card p-3 h-100">
+      <div class="col-6 col-lg-4"><div class="card p-3 h-100">
         <div class="d-flex justify-content-between align-items-center">
           <div><div class="text-muted small text-uppercase"><?= e($label) ?></div><div class="fs-3 fw-bold"><?= (int) $amount ?></div></div>
           <div class="feature-icon text-<?= e($color) ?>"><i class="bi <?= e($icon) ?>"></i></div>

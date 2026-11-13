@@ -22,10 +22,10 @@ function csv_header(string $filename): void
 
 if ($type === 'csv') {
     $attemptId = (int) ($_GET['attempt'] ?? 0);
-    $stmt = $pdo->prepare("SELECT a.*, u.name AS uname, u.email AS uemail, q.title AS qtitle FROM attempts a JOIN users u ON u.id=a.user_id JOIN quizzes q ON q.id=a.quiz_id WHERE a.id=? LIMIT 1");
+    $stmt = $pdo->prepare("SELECT a.*, u.name AS uname, u.email AS uemail, q.title AS qtitle, w.faculty_id, w.quiz_id AS managed_quiz_id, rp.published_at AS results_published_at FROM attempts a JOIN users u ON u.id=a.user_id JOIN quizzes q ON q.id=a.quiz_id LEFT JOIN exam_workflows w ON w.quiz_id=a.quiz_id LEFT JOIN result_publications rp ON rp.quiz_id=a.quiz_id WHERE a.id=? LIMIT 1");
     $stmt->execute([$attemptId]);
     $a = $stmt->fetch();
-    if (!$a || ((int)$a['user_id'] !== (int)$me['id'] && $me['role'] !== 'admin')) {
+    if (!$a || !attempt_export_allowed($pdo, $me, $a)) {
         http_response_code(404); die('Not found.');
     }
 
@@ -58,10 +58,10 @@ if ($type === 'csv') {
 
 if ($type === 'pdf') {
     $attemptId = (int) ($_GET['attempt'] ?? 0);
-    $stmt = $pdo->prepare("SELECT a.*, u.name AS uname, u.email AS uemail, u.college, q.title AS qtitle, q.tag, q.passing_percent FROM attempts a JOIN users u ON u.id=a.user_id JOIN quizzes q ON q.id=a.quiz_id WHERE a.id=? LIMIT 1");
+    $stmt = $pdo->prepare("SELECT a.*, u.name AS uname, u.email AS uemail, u.college, q.title AS qtitle, q.tag, q.passing_percent, w.faculty_id, w.quiz_id AS managed_quiz_id, rp.published_at AS results_published_at FROM attempts a JOIN users u ON u.id=a.user_id JOIN quizzes q ON q.id=a.quiz_id LEFT JOIN exam_workflows w ON w.quiz_id=a.quiz_id LEFT JOIN result_publications rp ON rp.quiz_id=a.quiz_id WHERE a.id=? LIMIT 1");
     $stmt->execute([$attemptId]);
     $a = $stmt->fetch();
-    if (!$a || ((int)$a['user_id'] !== (int)$me['id'] && $me['role'] !== 'admin')) {
+    if (!$a || !attempt_export_allowed($pdo, $me, $a)) {
         http_response_code(404); die('Not found.');
     }
     $brk = $pdo->prepare("
@@ -141,6 +141,25 @@ if ($type === 'pdf') {
     </body></html>
     <?php
     exit;
+}
+
+function attempt_export_allowed(PDO $pdo, array $user, array $attempt): bool
+{
+    if ($user['role'] === 'admin') {
+        return true;
+    }
+    if ($user['role'] === 'student') {
+        return (int) $attempt['user_id'] === (int) $user['id']
+            && ($attempt['managed_quiz_id'] === null || $attempt['results_published_at'] !== null);
+    }
+    if ($user['role'] === 'faculty' && (int) ($attempt['faculty_id'] ?? 0) === (int) $user['id']) {
+        $stmt = $pdo->prepare(
+            'SELECT COUNT(*) FROM exam_assigned_students WHERE quiz_id = ? AND student_id = ?'
+        );
+        $stmt->execute([(int) $attempt['quiz_id'], (int) $attempt['user_id']]);
+        return (int) $stmt->fetchColumn() > 0;
+    }
+    return false;
 }
 
 if ($type === 'attempts_csv') {

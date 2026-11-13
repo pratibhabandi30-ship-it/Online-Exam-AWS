@@ -9,9 +9,8 @@ require_once __DIR__ . '/functions.php';
 function certificate_type_for_percentage(float $percentage): ?string
 {
     return match (true) {
-        $percentage >= 80 && $percentage <= 100 => 'Platinum',
-        $percentage >= 50 && $percentage < 80 => 'Gold',
-        $percentage >= 35 && $percentage < 50 => 'Silver',
+        $percentage >= 80 && $percentage <= 100 => 'Gold',
+        $percentage >= 50 && $percentage < 80 => 'Silver',
         default => null,
     };
 }
@@ -28,27 +27,59 @@ function issue_certificate(PDO $pdo, int $attemptId, int $studentId, int $examId
         return null;
     }
 
-    $certificateId = 'OES-' . date('Y') . '-' . strtoupper(bin2hex(random_bytes(6)));
-    $verificationToken = bin2hex(random_bytes(32));
-    $grade = grade_letter(round($percentage, 1));
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
 
-    $stmt = $pdo->prepare("
-        INSERT INTO certificates
-            (certificate_id, student_id, exam_id, attempt_id, certificate_type, percentage, grade, verification_token)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->execute([
-        $certificateId,
-        $studentId,
-        $examId,
-        $attemptId,
-        $type,
-        number_format($percentage, 5, '.', ''),
-        $grade,
-        $verificationToken,
-    ]);
+    try {
+        $studentLock = $pdo->prepare('SELECT id FROM users WHERE id = ? FOR UPDATE');
+        $studentLock->execute([$studentId]);
+        if (!$studentLock->fetchColumn()) {
+            throw new InvalidArgumentException('Cannot issue a certificate for an unknown student.');
+        }
 
-    return $certificateId;
+        $existing = $pdo->prepare(
+            'SELECT id FROM certificates WHERE student_id = ? AND exam_id = ? LIMIT 1 FOR UPDATE'
+        );
+        $existing->execute([$studentId, $examId]);
+        if ($existing->fetchColumn()) {
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+            return null;
+        }
+
+        $certificateId = 'OES-' . date('Y') . '-' . strtoupper(bin2hex(random_bytes(6)));
+        $verificationToken = bin2hex(random_bytes(32));
+        $grade = grade_letter(round($percentage, 1));
+
+        $stmt = $pdo->prepare("
+            INSERT INTO certificates
+                (certificate_id, student_id, exam_id, attempt_id, certificate_type, percentage, grade, verification_token)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $certificateId,
+            $studentId,
+            $examId,
+            $attemptId,
+            $type,
+            number_format($percentage, 5, '.', ''),
+            $grade,
+            $verificationToken,
+        ]);
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+
+        return $certificateId;
+    } catch (Throwable $error) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
 }
 
 function backfill_eligible_certificates(PDO $pdo, ?int $studentId = null): int
@@ -60,11 +91,20 @@ function backfill_eligible_certificates(PDO $pdo, ?int $studentId = null): int
     $sql = "
         SELECT a.id, a.user_id, a.quiz_id, a.score, a.total_marks
         FROM attempts a
-        LEFT JOIN certificates c ON c.attempt_id = a.id
-        WHERE c.id IS NULL
+        WHERE NOT EXISTS (
+              SELECT 1 FROM certificates c
+              WHERE c.student_id = a.user_id AND c.exam_id = a.quiz_id
+          )
           AND a.total_marks > 0
           AND a.score <= a.total_marks
-          AND a.score * 100 >= a.total_marks * 35
+          AND a.score * 100 >= a.total_marks * 50
+          AND (
+              NOT EXISTS (SELECT 1 FROM exam_workflows w WHERE w.quiz_id = a.quiz_id)
+              OR EXISTS (
+                  SELECT 1 FROM result_publications rp
+                  WHERE rp.quiz_id = a.quiz_id AND rp.published_at IS NOT NULL
+              )
+          )
     ";
     $params = [];
     if ($studentId !== null) {
@@ -82,29 +122,18 @@ function backfill_eligible_certificates(PDO $pdo, ?int $studentId = null): int
 
     $pdo->beginTransaction();
     $issued = 0;
-    $existing = $pdo->prepare("SELECT id FROM certificates WHERE attempt_id = ? LIMIT 1");
-
     try {
         foreach ($attempts as $attempt) {
-            try {
-                issue_certificate(
-                    $pdo,
-                    (int) $attempt['id'],
-                    (int) $attempt['user_id'],
-                    (int) $attempt['quiz_id'],
-                    (int) $attempt['score'],
-                    (int) $attempt['total_marks']
-                );
+            $certificateId = issue_certificate(
+                $pdo,
+                (int) $attempt['id'],
+                (int) $attempt['user_id'],
+                (int) $attempt['quiz_id'],
+                (int) $attempt['score'],
+                (int) $attempt['total_marks']
+            );
+            if ($certificateId !== null) {
                 $issued++;
-            } catch (PDOException $error) {
-                if (($error->errorInfo[1] ?? null) !== 1062) {
-                    throw $error;
-                }
-
-                $existing->execute([$attempt['id']]);
-                if (!$existing->fetchColumn()) {
-                    throw $error;
-                }
             }
         }
 
@@ -128,7 +157,10 @@ function find_certificate(PDO $pdo, string $certificateId): ?array
         JOIN users u ON u.id = c.student_id
         JOIN quizzes q ON q.id = c.exam_id
         JOIN attempts a ON a.id = c.attempt_id
+        LEFT JOIN exam_workflows w ON w.quiz_id = c.exam_id
+        LEFT JOIN result_publications rp ON rp.quiz_id = c.exam_id
         WHERE c.certificate_id = ?
+          AND (w.quiz_id IS NULL OR rp.published_at IS NOT NULL)
         LIMIT 1
     ");
     $stmt->execute([$certificateId]);

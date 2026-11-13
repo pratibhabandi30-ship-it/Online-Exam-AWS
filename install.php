@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($adminName === '')                  $errors[] = 'Admin name is required.';
         if (!validate_email($adminEmail))       $errors[] = 'Admin email is invalid.';
-        if (strlen($adminPass) < 6)             $errors[] = 'Password must be at least 6 characters.';
+        if (!account_password_is_valid($adminPass)) $errors[] = account_password_policy_message();
 
         if (!$errors) {
             try {
@@ -65,14 +65,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo = db();
                 require_once __DIR__ . '/database/migrations/20261030_expand_course_catalog.php';
                 expand_course_catalog($pdo);
+                require_once __DIR__ . '/database/migrations/20261108_add_faculty_workspace.php';
+                add_faculty_workspace($pdo);
 
-                $hash = password_hash($adminPass, PASSWORD_ALGO);
+                $hash = hash_account_password($adminPass);
                 $stmt = $pdo->prepare("INSERT INTO users (name,email,password_hash,role,is_active,gender,college) VALUES (?,?,?,'admin',1,'O','OES HQ')
                                        ON DUPLICATE KEY UPDATE name=VALUES(name), password_hash=VALUES(password_hash), role='admin', is_active=1");
                 $stmt->execute([$adminName, $adminEmail, $hash]);
 
                 if ($createDemo) {
-                    $demoHash = password_hash('student@123', PASSWORD_ALGO);
+                    $demoHash = hash_account_password('student@123');
                     $stmt = $pdo->prepare("INSERT INTO users (name,email,password_hash,role,is_active,gender,college,mobile) VALUES (?,?,?,'student',1,?,?,?)
                                            ON DUPLICATE KEY UPDATE name=VALUES(name), password_hash=VALUES(password_hash)");
                     $stmt->execute(['Demo Student', 'student@oes.local', $demoHash, 'M', 'Demo College', '9876543210']);
@@ -130,7 +132,8 @@ include __DIR__ . '/includes/header.php';
             </div>
             <div class="mb-3">
               <label class="form-label">Admin password</label>
-              <input class="form-control" type="password" name="admin_password" required minlength="6" placeholder="At least 6 characters">
+              <input class="form-control" type="password" name="admin_password" required minlength="8" data-password-policy autocomplete="new-password" placeholder="At least 8 characters, a number, and a special character">
+              <div class="form-text">Must include at least one number and one of @ # $ % &amp; * !. No maximum length.</div>
             </div>
             <div class="form-check mb-4">
               <input class="form-check-input" type="checkbox" name="create_demo" id="demoChk" checked>

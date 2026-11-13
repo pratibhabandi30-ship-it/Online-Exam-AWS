@@ -30,12 +30,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = db()->prepare('SELECT password_hash FROM users WHERE id=? LIMIT 1');
         $stmt->execute([$me['id']]);
         $row = $stmt->fetch();
-        if (!$row || !password_verify($current, $row['password_hash'])) $errors[] = 'Current password is incorrect.';
-        if (strlen($next) < 6)        $errors[] = 'New password must be at least 6 characters.';
+        if (!$row || !verify_account_password($current, $row['password_hash'])) $errors[] = 'Current password is incorrect.';
+        if (!account_password_is_valid($next)) $errors[] = account_password_policy_message();
         if ($next !== $confirm)       $errors[] = 'New passwords do not match.';
 
         if (!$errors) {
-            $hash = password_hash($next, PASSWORD_ALGO);
+            $hash = hash_account_password($next);
             db()->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([$hash, $me['id']]);
             flash('success', 'Password changed.');
             redirect('profile.php');
@@ -45,11 +45,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $pageTitle = 'Profile';
 $activeNav = 'profile';
+$facultyShellEnabled = ($me['role'] ?? '') === 'faculty';
 include __DIR__ . '/includes/header.php';
+if ($facultyShellEnabled) {
+    $facultyActive = 'settings';
+    include __DIR__ . '/faculty/_nav.php';
+}
 ?>
 <div class="container py-4">
   <div class="d-flex align-items-center mb-4">
-    <div class="me-3" style="width:56px;height:56px;border-radius:50%;background:rgba(79,70,229,.1);display:grid;place-items:center;font-size:1.5rem;color:var(--oes-primary);font-weight:700">
+    <div class="me-3" style="width:56px;height:56px;border-radius:50%;background:rgba(96,108,56,.1);display:grid;place-items:center;font-size:1.5rem;color:var(--oes-primary);font-weight:700">
       <?= e(mb_strtoupper(mb_substr($me['name'],0,1))) ?>
     </div>
     <div>
@@ -107,15 +112,16 @@ include __DIR__ . '/includes/header.php';
           <input type="hidden" name="action" value="change_password">
           <div class="mb-3">
             <label class="form-label">Current password</label>
-            <input type="password" class="form-control" name="current_password" required>
+            <input type="password" class="form-control" name="current_password" required autocomplete="current-password">
           </div>
           <div class="mb-3">
             <label class="form-label">New password</label>
-            <input type="password" class="form-control" name="new_password" required minlength="6">
+            <input type="password" id="profileNewPassword" class="form-control" name="new_password" required minlength="8" data-password-policy autocomplete="new-password">
+            <div class="form-text">At least 8 characters, including a number and one of @ # $ % &amp; * !. No maximum length.</div>
           </div>
           <div class="mb-3">
             <label class="form-label">Confirm new password</label>
-            <input type="password" class="form-control" name="confirm_password" required minlength="6">
+            <input type="password" class="form-control" name="confirm_password" required minlength="8" data-password-confirm="#profileNewPassword" autocomplete="new-password">
           </div>
           <button class="btn btn-outline-primary"><i class="bi bi-shield-check"></i> Update password</button>
         </form>

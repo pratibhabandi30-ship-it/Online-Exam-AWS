@@ -2,10 +2,13 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-$me = require_login();
-if ($me['role'] !== 'student') redirect('admin/dashboard.php');
+$me = require_student();
 
 $pdo    = db();
+$pdo->prepare(
+    "UPDATE notifications SET read_at = NOW()
+     WHERE user_id = ? AND type = 'exam_published' AND read_at IS NULL"
+)->execute([(int) $me['id']]);
 $search = clean_string($_GET['q'] ?? '', 100);
 $tag    = clean_string($_GET['tag'] ?? '', 60);
 $difficulty = clean_string($_GET['difficulty'] ?? '', 20);
@@ -17,8 +20,14 @@ $allowedSorts = ['newest', 'name'];
 if (!in_array($difficulty, $allowedDifficulties, true)) $difficulty = '';
 if (!in_array($sort, $allowedSorts, true)) $sort = 'newest';
 
-$where = " FROM quizzes q WHERE q.is_published = 1";
-$args = [];
+$where = " FROM quizzes q
+           LEFT JOIN exam_workflows w ON w.quiz_id = q.id
+           WHERE q.is_published = 1
+             AND (w.quiz_id IS NULL OR (w.status = 'published' AND EXISTS (
+                 SELECT 1 FROM exam_assigned_students assigned
+                 WHERE assigned.quiz_id = q.id AND assigned.student_id = ?
+             )))";
+$args = [(int) $me['id']];
 if ($search !== '') { $where .= " AND q.title LIKE ?"; $args[] = "%$search%"; }
 if ($tag !== '') { $where .= " AND q.tag = ?"; $args[] = $tag; }
 if ($difficulty !== '') { $where .= " AND q.difficulty = ?"; $args[] = $difficulty; }
@@ -30,13 +39,25 @@ $totalPages = max(1, (int) ceil($totalExams / $perPage));
 $page = min($page, $totalPages);
 $offset = ($page - 1) * $perPage;
 $orderBy = $sort === 'name' ? 'q.title ASC, q.id ASC' : 'q.created_at DESC, q.id DESC';
-$sql = "SELECT q.*, (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) AS qcount" .
+$sql = "SELECT q.*, w.scheduled_start, w.scheduled_end,
+               EXISTS (SELECT 1 FROM attempts a WHERE a.quiz_id = q.id AND a.user_id = ? AND w.quiz_id IS NOT NULL) AS already_attempted,
+               (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) AS qcount" .
        $where . " ORDER BY " . $orderBy . " LIMIT " . $perPage . " OFFSET " . $offset;
 $stmt = $pdo->prepare($sql);
-$stmt->execute($args);
+$stmt->execute(array_merge([(int) $me['id']], $args));
 $quizzes = $stmt->fetchAll();
 
-$tags = $pdo->query("SELECT DISTINCT tag FROM quizzes WHERE is_published=1 AND tag IS NOT NULL AND tag<>'' ORDER BY tag")->fetchAll(PDO::FETCH_COLUMN);
+$tagStmt = $pdo->prepare(
+    "SELECT DISTINCT q.tag FROM quizzes q
+     LEFT JOIN exam_workflows w ON w.quiz_id = q.id
+     WHERE q.is_published = 1 AND q.tag IS NOT NULL AND q.tag <> ''
+       AND (w.quiz_id IS NULL OR (w.status = 'published' AND EXISTS (
+           SELECT 1 FROM exam_assigned_students assigned WHERE assigned.quiz_id = q.id AND assigned.student_id = ?
+       )))
+     ORDER BY q.tag"
+);
+$tagStmt->execute([(int) $me['id']]);
+$tags = $tagStmt->fetchAll(PDO::FETCH_COLUMN);
 
 $pageTitle = 'Exams';
 $activeNav = 'exams';
@@ -101,12 +122,26 @@ include __DIR__ . '/includes/header.php';
               <div class="course-card-meta" aria-label="Exam details">
                 <span><i class="bi bi-clock"></i> <?= (int) $q['duration_minutes'] ?> min</span>
                 <span><i class="bi bi-list-check"></i> <?= (int) $q['qcount'] ?> questions</span>
+                <?php if ($q['scheduled_start']): ?><span><i class="bi bi-calendar-event"></i> <?= e(date('d M, H:i', strtotime($q['scheduled_start']))) ?></span><?php endif; ?>
               </div>
               <div class="course-card-footer">
                 <span class="course-card-difficulty difficulty-<?= e(strtolower($q['difficulty'])) ?>"><?= e($q['difficulty']) ?></span>
-                <a href="<?= e(base_url('take-exam.php?quiz=' . (int) $q['id'])) ?>" class="btn btn-primary course-card-start">
-                  Start Exam <i class="bi bi-arrow-up-right"></i>
-                </a>
+                <?php
+                  $examStartsAt = $q['scheduled_start'] ? strtotime($q['scheduled_start']) : null;
+                  $examEndsAt = $q['scheduled_end'] ? strtotime($q['scheduled_end']) : null;
+                  $managedUnavailable = (bool) $q['already_attempted']
+                      || ($examStartsAt !== null && time() < $examStartsAt)
+                      || ($examEndsAt !== null && time() >= $examEndsAt);
+                ?>
+                <?php if ($managedUnavailable): ?>
+                  <button type="button" class="btn btn-outline-secondary course-card-start" disabled>
+                    <?= $q['already_attempted'] ? 'Submitted' : (($examStartsAt !== null && time() < $examStartsAt) ? 'Upcoming' : 'Closed') ?>
+                  </button>
+                <?php else: ?>
+                  <a href="<?= e(base_url('take-exam.php?quiz=' . (int) $q['id'])) ?>" class="btn btn-primary course-card-start">
+                    Start Exam <i class="bi bi-arrow-up-right"></i>
+                  </a>
+                <?php endif; ?>
               </div>
             </div>
           </article>

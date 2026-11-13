@@ -2,6 +2,56 @@
 (function () {
   'use strict';
 
+  // ---------- Password validation and visibility ----------
+  const passwordPolicyInputs = Array.from(document.querySelectorAll('[data-password-policy]'));
+  const passwordConfirmInputs = Array.from(document.querySelectorAll('[data-password-confirm]'));
+  const passwordPolicyMessage = 'Use at least 8 characters, including a number and one of @ # $ % & * !.';
+  const updatePasswordValidity = () => {
+    passwordPolicyInputs.forEach(input => {
+      const value = input.value;
+      const valid = Array.from(value).length >= 8
+        && /[0-9]/.test(value)
+        && /[@#$%&*!]/.test(value);
+      input.setCustomValidity(value && !valid ? passwordPolicyMessage : '');
+    });
+    passwordConfirmInputs.forEach(input => {
+      const target = document.querySelector(input.dataset.passwordConfirm);
+      input.setCustomValidity(input.value && target && input.value !== target.value
+        ? 'The passwords do not match.'
+        : '');
+    });
+  };
+  passwordPolicyInputs.concat(passwordConfirmInputs).forEach(input => {
+    input.addEventListener('input', updatePasswordValidity);
+    const form = input.closest('form');
+    form?.addEventListener('submit', updatePasswordValidity);
+  });
+  updatePasswordValidity();
+
+  document.querySelectorAll('input[type="password"]').forEach(input => {
+    const group = document.createElement('div');
+    group.className = 'input-group';
+    input.parentNode.insertBefore(group, input);
+    group.appendChild(input);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'btn btn-outline-secondary';
+    toggle.setAttribute('aria-label', 'Show password');
+    toggle.setAttribute('aria-pressed', 'false');
+    toggle.innerHTML = '<i class="bi bi-eye" aria-hidden="true"></i>';
+    toggle.addEventListener('click', () => {
+      const visible = input.type === 'password';
+      input.type = visible ? 'text' : 'password';
+      toggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+      toggle.setAttribute('aria-pressed', visible ? 'true' : 'false');
+      toggle.innerHTML = visible
+        ? '<i class="bi bi-eye-slash" aria-hidden="true"></i>'
+        : '<i class="bi bi-eye" aria-hidden="true"></i>';
+      input.focus();
+    });
+    group.appendChild(toggle);
+  });
+
   // ---------- Theme toggle ----------
   const savedTheme = localStorage.getItem('oes-theme') || 'light';
   document.documentElement.setAttribute('data-bs-theme', savedTheme);
@@ -20,6 +70,61 @@
       document.documentElement.setAttribute('data-bs-theme', next);
       localStorage.setItem('oes-theme', next);
       updateIcon();
+    });
+  }
+
+  // ---------- HOD sidebar ----------
+  const adminSidebar = document.getElementById('adminSidebar');
+  if (adminSidebar) {
+    const body = document.body;
+    const preferenceKey = body.classList.contains('student-shell-page')
+      ? 'oes-student-sidebar'
+      : (body.classList.contains('faculty-shell-page') ? 'oes-faculty-sidebar' : 'oes-admin-sidebar');
+    const sidebarToggle = document.querySelector('.admin-menu-toggle');
+    const backdrop = document.querySelector('.admin-sidebar-backdrop');
+    const searchToggle = document.querySelector('.admin-search-toggle');
+    const searchForm = document.querySelector('.admin-search');
+    const mobileSidebar = () => window.matchMedia(
+      body.classList.contains('student-shell-page') ? '(max-width: 767.98px)' : '(max-width: 991.98px)'
+    ).matches;
+    const compactStudentSidebar = () => body.classList.contains('student-shell-page')
+      && window.matchMedia('(min-width: 768px) and (max-width: 991.98px)').matches;
+    const sidebarPreference = localStorage.getItem(preferenceKey);
+    if ((sidebarPreference === 'collapsed' || (compactStudentSidebar() && sidebarPreference !== 'expanded')) && !mobileSidebar()) {
+      body.classList.add('admin-sidebar-collapsed');
+    }
+    sidebarToggle?.addEventListener('click', () => {
+      if (mobileSidebar()) {
+        body.classList.toggle('admin-sidebar-open');
+      } else {
+        body.classList.toggle('admin-sidebar-collapsed');
+        localStorage.setItem(preferenceKey, body.classList.contains('admin-sidebar-collapsed') ? 'collapsed' : 'expanded');
+      }
+    });
+    backdrop?.addEventListener('click', () => body.classList.remove('admin-sidebar-open'));
+    adminSidebar.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => body.classList.remove('admin-sidebar-open'));
+    });
+    searchToggle?.addEventListener('click', () => {
+      searchForm?.classList.toggle('is-open');
+      if (searchForm?.classList.contains('is-open')) searchForm.querySelector('input')?.focus();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        body.classList.remove('admin-sidebar-open');
+        searchForm?.classList.remove('is-open');
+      }
+    });
+    window.addEventListener('resize', () => {
+      if (!mobileSidebar()) body.classList.remove('admin-sidebar-open');
+      if (body.classList.contains('student-shell-page')) {
+        const preference = localStorage.getItem(preferenceKey);
+        if (compactStudentSidebar() && preference !== 'expanded') {
+          body.classList.add('admin-sidebar-collapsed');
+        } else if (!compactStudentSidebar() && preference === null) {
+          body.classList.remove('admin-sidebar-collapsed');
+        }
+      }
     });
   }
 

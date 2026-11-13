@@ -106,8 +106,12 @@
   </div>
 </footer>
 <?php endif; ?>
+<?php if (!empty($isAdminShell) || !empty($isFacultyShell) || !empty($isStudentShell)): ?>
+  </main>
+</div>
+<?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="<?= e(base_url('assets/js/app.js?v=20261030-courses')) ?>"></script>
+<script src="<?= e(base_url('assets/js/app.js?v=20261108-password-policy')) ?>"></script>
 </body>
 </html>

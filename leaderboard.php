@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-$me = require_login();
+$me = require_student();
 $pdo = db();
 
 $rows = $pdo->query("
@@ -11,6 +11,8 @@ $rows = $pdo->query("
            COUNT(*) AS attempts
     FROM attempts a JOIN users u ON u.id = a.user_id
     WHERE u.role = 'student'
+      AND (NOT EXISTS (SELECT 1 FROM exam_workflows w WHERE w.quiz_id = a.quiz_id)
+           OR EXISTS (SELECT 1 FROM result_publications rp WHERE rp.quiz_id = a.quiz_id))
     GROUP BY u.id
     ORDER BY total_score DESC, attempts DESC
     LIMIT 50

@@ -36,14 +36,24 @@ $verificationUrl = base_url('verify-certificate.php?id=' . rawurlencode($certifi
 ob_start();
 include __DIR__ . '/includes/certificate-template.php';
 $template = ob_get_clean();
-$html = '<!doctype html><html><head><meta charset="utf-8"></head><body>' . $template . '</body></html>';
+$html = '<!doctype html><html><head><meta charset="utf-8"><style>'
+    . '@page{size:A4 landscape;margin:0}'
+    . 'html,body{box-sizing:border-box;width:297mm;height:210mm;margin:0;padding:0;overflow:hidden}'
+    . 'body>img.achievement-certificate{position:absolute!important;top:0!important;left:0!important;display:block!important;width:297mm!important;height:210mm!important;max-width:none!important;margin:0!important;page-break-after:avoid}'
+    . '</style></head><body>' . $template . '</body></html>';
 
-$dompdf = new \Dompdf\Dompdf();
+$dompdf = new \Dompdf\Dompdf([
+    'defaultFont' => 'DejaVu Sans',
+    'defaultMediaType' => 'print',
+    'isHtml5ParserEnabled' => true,
+    'isRemoteEnabled' => false,
+    'dpi' => 96,
+]);
 $dompdf->loadHtml($html, 'UTF-8');
 $dompdf->setPaper('A4', 'landscape');
 $dompdf->render();
 
 $safeName = preg_replace('/[^A-Za-z0-9_-]+/', '_', $certificate['student_name']) ?: 'Student';
-$filename = $safeName . '_' . $certificate['certificate_type'] . '_Certificate.pdf';
+$filename = $safeName . '_' . $certificate['certificate_type'] . '_Academic_Excellence_Award.pdf';
 $dompdf->stream($filename, ['Attachment' => true]);
 exit;

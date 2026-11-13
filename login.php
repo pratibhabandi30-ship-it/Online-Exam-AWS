@@ -4,7 +4,11 @@ require_once __DIR__ . '/includes/functions.php';
 
 $current = current_user();
 if ($current) {
-    redirect($current['role'] === 'admin' ? 'admin/dashboard.php' : 'dashboard.php');
+    redirect(match ($current['role']) {
+        'admin' => 'admin/dashboard.php',
+        'faculty' => 'faculty/dashboard.php',
+        default => 'dashboard.php',
+    });
 }
 
 $errors = [];
@@ -22,19 +26,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = db()->prepare("SELECT id, password_hash, role, is_active FROM users WHERE email = ? LIMIT 1");
         $stmt->execute([$email]);
         $u = $stmt->fetch();
-        if (!$u || $u['role'] !== 'student' || !password_verify($password, $u['password_hash'])) {
+        if (!$u || !in_array($u['role'], ['student', 'faculty'], true) || !verify_account_password($password, $u['password_hash'])) {
             $errors[] = 'Incorrect email or password.';
         } elseif (!$u['is_active']) {
             $errors[] = 'Your account is disabled. Contact the admin.';
         } else {
             login_user((int) $u['id']);
             // Optional rehash
-            if (password_needs_rehash($u['password_hash'], PASSWORD_ALGO)) {
-                $rh = password_hash($password, PASSWORD_ALGO);
+            if (account_password_needs_rehash($u['password_hash'])) {
+                $rh = hash_account_password($password);
                 db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([$rh, $u['id']]);
             }
             flash('success', 'Welcome back!');
-            redirect('dashboard.php');
+            redirect($u['role'] === 'faculty' ? 'faculty/dashboard.php' : 'dashboard.php');
         }
     }
 }

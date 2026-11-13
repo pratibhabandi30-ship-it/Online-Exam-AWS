@@ -48,7 +48,7 @@ include __DIR__ . '/_nav.php';
               data:{
                 labels: <?= json_encode(array_map(fn($r)=>date('d M',strtotime($r['d'])),$byDay)) ?>,
                 datasets:[{label:'Attempts', data: <?= json_encode(array_map(fn($r)=>(int)$r['c'],$byDay)) ?>,
-                  borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,.12)', fill:true, tension:.35}]
+                  borderColor:'#606c38', backgroundColor:'rgba(96,108,56,.14)', fill:true, tension:.35}]
               },
               options:{plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{precision:0}}}}
             });
@@ -70,7 +70,7 @@ include __DIR__ . '/_nav.php';
                 data:{
                   labels: <?= json_encode(array_column($byTag,'tag')) ?>,
                   datasets:[{ data: <?= json_encode(array_map(fn($r)=>(float)$r['avg_pct'],$byTag)) ?>,
-                    backgroundColor:['#4f46e5','#06b6d4','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'] }]
+                    backgroundColor:['#606c38','#7f8c45','#a3b078','#283618','#bac78e','#89965a','#d2dbb5'] }]
                 },
                 options:{plugins:{legend:{position:'bottom'}}}
               });

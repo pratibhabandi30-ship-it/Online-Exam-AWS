@@ -3,7 +3,13 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
 $current = current_user();
-if ($current && $current['role'] === 'admin') redirect('admin/dashboard.php');
+if ($current) {
+    redirect(match ($current['role']) {
+        'admin' => 'admin/dashboard.php',
+        'faculty' => 'faculty/dashboard.php',
+        default => 'dashboard.php',
+    });
+}
 
 $errors = [];
 $email  = '';
@@ -15,20 +21,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($password === '')        $errors[] = 'Password required.';
 
     if (!$errors) {
-        $stmt = db()->prepare("SELECT id, password_hash, role FROM users WHERE email=? LIMIT 1");
+        $stmt = db()->prepare("SELECT id, password_hash, role, is_active FROM users WHERE email=? LIMIT 1");
         $stmt->execute([$email]);
         $u = $stmt->fetch();
-        if (!$u || $u['role'] !== 'admin' || !password_verify($password, $u['password_hash'])) {
+        if (!$u || $u['role'] !== 'admin' || !verify_account_password($password, $u['password_hash'])) {
             $errors[] = 'Invalid admin credentials.';
+        } elseif (!(int) $u['is_active']) {
+            $errors[] = 'This account is disabled.';
         } else {
             login_user((int) $u['id']);
+            if (account_password_needs_rehash($u['password_hash'])) {
+                $rehash = hash_account_password($password);
+                db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([$rehash, $u['id']]);
+            }
             flash('success', 'Welcome back, admin.');
             redirect('admin/dashboard.php');
         }
     }
 }
 
-$pageTitle = 'Admin sign in';
+$pageTitle = 'HOD sign in';
 include __DIR__ . '/../includes/header.php';
 ?>
 <div class="container py-5">
@@ -37,7 +49,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="card p-4 p-md-5">
         <div class="text-center mb-3">
           <div class="feature-icon mx-auto mb-2" style="width:56px;height:56px"><i class="bi bi-shield-lock"></i></div>
-          <h4 class="mb-0">Admin sign in</h4>
+          <h4 class="mb-0">HOD sign in</h4>
           <small class="text-muted">Restricted access</small>
         </div>
 
@@ -57,7 +69,7 @@ include __DIR__ . '/../includes/header.php';
           </div>
           <button class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Sign in</button>
           <div class="text-center mt-3 small">
-            <a href="<?= e(base_url('login.php')) ?>">Student login &rarr;</a>
+            <a href="<?= e(base_url('login.php')) ?>">Faculty / student login &rarr;</a>
           </div>
         </form>
       </div>

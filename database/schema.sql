@@ -21,7 +21,7 @@ CREATE DATABASE IF NOT EXISTS `online_exam_system`
 USE `online_exam_system`;
 
 -- ------------------------------------------------------------
--- USERS (students + admins; differentiated by role)
+-- USERS (students, faculty and administrators/HOD)
 -- ------------------------------------------------------------
 DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
@@ -32,13 +32,69 @@ CREATE TABLE `users` (
   `gender`        ENUM('M','F','O') DEFAULT NULL,
   `college`       VARCHAR(120) DEFAULT NULL,
   `mobile`        VARCHAR(20)  DEFAULT NULL,
-  `role`          ENUM('student','admin') NOT NULL DEFAULT 'student',
+  `role`          ENUM('student','faculty','admin') NOT NULL DEFAULT 'student',
   `is_active`     TINYINT(1)   NOT NULL DEFAULT 1,
   `created_at`    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_users_email` (`email`),
   KEY `idx_users_role` (`role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- DEPARTMENT PROFILES AND FACULTY/STUDENT ASSIGNMENTS
+-- ------------------------------------------------------------
+CREATE TABLE `faculty_profiles` (
+  `user_id`       INT UNSIGNED NOT NULL,
+  `branch`        VARCHAR(120) DEFAULT NULL,
+  `subject`       VARCHAR(120) DEFAULT NULL,
+  `max_students`  SMALLINT UNSIGNED NOT NULL DEFAULT 12,
+  `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`),
+  CONSTRAINT `fk_faculty_profiles_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `student_profiles` (
+  `user_id`          INT UNSIGNED NOT NULL,
+  `registration_no`  VARCHAR(60) DEFAULT NULL,
+  `branch`           VARCHAR(120) DEFAULT NULL,
+  `semester`         TINYINT UNSIGNED DEFAULT NULL,
+  `academic_year`    VARCHAR(20) DEFAULT NULL,
+  `created_at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`),
+  UNIQUE KEY `uniq_student_registration_no` (`registration_no`),
+  KEY `idx_student_profiles_branch_semester` (`branch`, `semester`),
+  CONSTRAINT `fk_student_profiles_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `faculty_student_assignments` (
+  `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `faculty_id`  INT UNSIGNED NOT NULL,
+  `student_id`  INT UNSIGNED NOT NULL,
+  `assigned_by` INT UNSIGNED DEFAULT NULL,
+  `assigned_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_assignment_student` (`student_id`),
+  KEY `idx_assignment_faculty` (`faculty_id`),
+  CONSTRAINT `fk_assignment_faculty` FOREIGN KEY (`faculty_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_assignment_student` FOREIGN KEY (`student_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_assignment_admin` FOREIGN KEY (`assigned_by`) REFERENCES `users`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `audit_logs` (
+  `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `actor_id`    INT UNSIGNED DEFAULT NULL,
+  `action`      VARCHAR(100) NOT NULL,
+  `entity_type` VARCHAR(80) NOT NULL,
+  `entity_id`   VARCHAR(80) DEFAULT NULL,
+  `details`     TEXT DEFAULT NULL,
+  `created_at`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_actor_created` (`actor_id`, `created_at`),
+  KEY `idx_audit_entity` (`entity_type`, `entity_id`),
+  CONSTRAINT `fk_audit_actor` FOREIGN KEY (`actor_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -75,10 +131,38 @@ CREATE TABLE `questions` (
   `marks`      TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `difficulty` ENUM('Beginner','Intermediate') NOT NULL DEFAULT 'Beginner',
   `position`   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `question_type` ENUM('mcq','fill_blank','match','true_false','coding') NOT NULL DEFAULT 'mcq',
+  `programming_language` VARCHAR(20) DEFAULT NULL,
+  `sample_input` MEDIUMTEXT DEFAULT NULL,
+  `expected_output` MEDIUMTEXT DEFAULT NULL,
+  `coding_constraints` TEXT DEFAULT NULL,
   `created_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_questions_quiz` (`quiz_id`),
   CONSTRAINT `fk_questions_quiz` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `question_matching_pairs` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `question_id` INT UNSIGNED NOT NULL,
+  `left_text` VARCHAR(500) NOT NULL,
+  `right_text` VARCHAR(500) NOT NULL,
+  `marks` TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `position` SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  KEY `idx_matching_pairs_question` (`question_id`, `position`),
+  CONSTRAINT `fk_matching_pairs_question` FOREIGN KEY (`question_id`) REFERENCES `questions`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `question_coding_test_cases` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `question_id` INT UNSIGNED NOT NULL,
+  `input_data` MEDIUMTEXT NOT NULL,
+  `expected_output` MEDIUMTEXT NOT NULL,
+  `position` SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  KEY `idx_coding_test_cases_question` (`question_id`, `position`),
+  CONSTRAINT `fk_coding_test_cases_question` FOREIGN KEY (`question_id`) REFERENCES `questions`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -121,6 +205,96 @@ CREATE TABLE `attempts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
+-- FACULTY EXAM APPROVAL, SCHEDULES AND RESULT PUBLICATION
+-- ------------------------------------------------------------
+CREATE TABLE `exam_workflows` (
+  `quiz_id` INT UNSIGNED NOT NULL,
+  `faculty_id` INT UNSIGNED NOT NULL,
+  `status` ENUM('draft','pending','approved','rejected','published','completed','cancelled') NOT NULL DEFAULT 'draft',
+  `scheduled_start` DATETIME DEFAULT NULL,
+  `scheduled_end` DATETIME DEFAULT NULL,
+  `instructions` TEXT DEFAULT NULL,
+  `hod_remarks` VARCHAR(1000) DEFAULT NULL,
+  `reviewed_by` INT UNSIGNED DEFAULT NULL,
+  `reviewed_at` DATETIME DEFAULT NULL,
+  `requested_at` DATETIME DEFAULT NULL,
+  `published_at` DATETIME DEFAULT NULL,
+  `results_published_by` INT UNSIGNED DEFAULT NULL,
+  `results_published_at` DATETIME DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`quiz_id`),
+  KEY `idx_exam_workflows_faculty_status` (`faculty_id`, `status`),
+  KEY `idx_exam_workflows_schedule` (`status`, `scheduled_start`, `scheduled_end`),
+  CONSTRAINT `fk_exam_workflow_quiz` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_exam_workflow_faculty` FOREIGN KEY (`faculty_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_exam_workflow_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_exam_workflow_results_publisher` FOREIGN KEY (`results_published_by`) REFERENCES `users`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `exam_assigned_students` (
+  `quiz_id` INT UNSIGNED NOT NULL,
+  `student_id` INT UNSIGNED NOT NULL,
+  `assigned_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`quiz_id`, `student_id`),
+  KEY `idx_exam_assigned_student` (`student_id`, `quiz_id`),
+  CONSTRAINT `fk_exam_assigned_quiz` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_exam_assigned_student` FOREIGN KEY (`student_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `notifications` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `type` VARCHAR(60) NOT NULL,
+  `title` VARCHAR(180) NOT NULL,
+  `message` VARCHAR(1000) NOT NULL,
+  `link` VARCHAR(500) DEFAULT NULL,
+  `read_at` DATETIME DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_notifications_user_read_created` (`user_id`, `read_at`, `created_at`),
+  CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `result_publications` (
+  `quiz_id` INT UNSIGNED NOT NULL,
+  `published_by` INT UNSIGNED NOT NULL,
+  `published_at` DATETIME NOT NULL,
+  PRIMARY KEY (`quiz_id`),
+  KEY `idx_result_publications_publisher` (`published_by`, `published_at`),
+  CONSTRAINT `fk_result_publication_quiz` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_result_publication_user` FOREIGN KEY (`published_by`) REFERENCES `users`(`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `exam_autosaves` (
+  `quiz_id` INT UNSIGNED NOT NULL,
+  `student_id` INT UNSIGNED NOT NULL,
+  `question_id` INT UNSIGNED NOT NULL,
+  `selected_option_id` INT UNSIGNED NOT NULL,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`quiz_id`, `student_id`, `question_id`),
+  KEY `idx_exam_autosaves_student` (`student_id`, `quiz_id`),
+  CONSTRAINT `fk_exam_autosaves_quiz` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_exam_autosaves_student` FOREIGN KEY (`student_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_exam_autosaves_question` FOREIGN KEY (`question_id`) REFERENCES `questions`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_exam_autosaves_option` FOREIGN KEY (`selected_option_id`) REFERENCES `options`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `exam_answer_autosaves` (
+  `quiz_id` INT UNSIGNED NOT NULL,
+  `student_id` INT UNSIGNED NOT NULL,
+  `question_id` INT UNSIGNED NOT NULL,
+  `answer_json` LONGTEXT NOT NULL,
+  `marked_for_review` TINYINT(1) NOT NULL DEFAULT 0,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`quiz_id`, `student_id`, `question_id`),
+  KEY `idx_answer_autosaves_student` (`student_id`, `quiz_id`),
+  CONSTRAINT `fk_answer_autosaves_quiz` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_answer_autosaves_student` FOREIGN KEY (`student_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_answer_autosaves_question` FOREIGN KEY (`question_id`) REFERENCES `questions`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
 -- ATTEMPT_ANSWERS (per-question record of what the user picked)
 -- ------------------------------------------------------------
 DROP TABLE IF EXISTS `attempt_answers`;
@@ -130,6 +304,9 @@ CREATE TABLE `attempt_answers` (
   `question_id`      INT UNSIGNED NOT NULL,
   `selected_option_id` INT UNSIGNED DEFAULT NULL,
   `is_correct`       TINYINT(1)   NOT NULL DEFAULT 0,
+  `answer_text`      LONGTEXT DEFAULT NULL,
+  `awarded_marks`    SMALLINT UNSIGNED DEFAULT NULL,
+  `feedback`         TEXT DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_aa_attempt` (`attempt_id`),
   KEY `idx_aa_question` (`question_id`),
@@ -166,7 +343,7 @@ CREATE TABLE IF NOT EXISTS `certificates` (
   `student_id` INT UNSIGNED NOT NULL,
   `exam_id` INT UNSIGNED NOT NULL,
   `attempt_id` INT UNSIGNED NOT NULL,
-  `certificate_type` ENUM('Silver','Gold','Platinum') NOT NULL,
+  `certificate_type` ENUM('Silver','Gold') NOT NULL,
   `percentage` DECIMAL(8,5) NOT NULL,
   `grade` VARCHAR(3) NOT NULL,
   `issue_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -180,6 +357,7 @@ CREATE TABLE IF NOT EXISTS `certificates` (
   UNIQUE KEY `uniq_certificates_attempt_id` (`attempt_id`),
   UNIQUE KEY `uniq_certificates_verification_token` (`verification_token`),
   KEY `idx_certificates_student` (`student_id`),
+  KEY `idx_certificates_student_exam` (`student_id`, `exam_id`),
   KEY `idx_certificates_exam` (`exam_id`),
   KEY `idx_certificates_type_status` (`certificate_type`, `status`),
   CONSTRAINT `fk_certificates_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,

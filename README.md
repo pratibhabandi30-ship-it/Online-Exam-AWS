@@ -1,18 +1,20 @@
 # Online Exam System
 
-A server-rendered PHP and MySQL application for managing online exams, student results, and achievement certificates. It provides public, student, and administrator pages and can run locally with XAMPP or on an Amazon Linux EC2 instance with Amazon RDS for MySQL.
+A server-rendered PHP and MySQL application for managing online exams, student results, and achievement certificates. It provides public, student, faculty, and HOD/administrator pages and can run locally with XAMPP or on an Amazon Linux EC2 instance with Amazon RDS for MySQL.
 
 ## Project details
 
 ### Features
 
-- Student registration, login, profiles, and role-based administrator access.
+- Student registration, login, profiles, and role-based student, faculty, and HOD access.
 - Published course catalog with search, category and difficulty filters, sorting, and pagination.
 - Twenty-five seeded courses with multiple-choice questions and local course photographs.
 - Timed exams, server-side grading, saved answers, result history, and downloadable reports.
+- Student dashboard with assigned exam schedules and countdowns, faculty timetables, attendance history, published-result analytics, announcements, and notifications.
 - Student leaderboard ranked by total score, with completed attempts as a tie-breaker.
 - Silver, Gold, and Platinum certificates based on submitted exam percentage, with PDF downloads and public verification.
 - Administrator tools for managing courses, questions, students, exam attempts, certificates, and feedback.
+- HOD-managed faculty and student accounts, academic profiles, configurable faculty workloads, and faculty-only assigned-student views.
 - Responsive interface, dark/light theme, and dashboard charts.
 
 Certificate eligibility is based on actual score divided by maximum marks:
@@ -68,6 +70,7 @@ flowchart TD
     Session[Authenticated PHP session and CSRF-protected forms]
     Role{Account role}
     Student[Student pages]
+    Faculty[Faculty dashboard and assigned students]
     Exam[Open a published exam]
     Submit[Submit answers]
     Grade[Server validates answers and calculates score]
@@ -75,21 +78,23 @@ flowchart TD
     Certificate{Score is at least 35%?}
     Issue[Issue eligible certificate]
     Result[Show result and update history / leaderboard]
-    Admin[Administrator dashboard and management pages]
+    Admin[HOD dashboard and department management]
 
     Public --> Register --> Session --> Role
     Role -->|Student| Student
+    Role -->|Faculty| Faculty
     Student --> Exam --> Submit --> Grade --> Save --> Certificate
     Certificate -->|Yes| Issue --> Result
     Certificate -->|No| Result
-    Role -->|Administrator| Admin
+    Role -->|HOD / administrator| Admin
 ```
 
 ### Project layout
 
 ```text
 online-exam-system/
-├── admin/                 Administrator pages
+├── admin/                 HOD, approvals, schedules, activity log, and administrator pages
+├── faculty/               Faculty dashboard, exam requests, results, and assigned-student views
 ├── assets/
 │   ├── css/style.css      Shared styles
 │   ├── images/courses/    Bundled course thumbnails and attribution
@@ -98,13 +103,16 @@ online-exam-system/
 ├── config/config.php      Default settings and local override loader
 ├── database/
 │   ├── schema.sql         Fresh-install schema and original sample courses
-│   └── migrations/        Incremental catalog, thumbnail, and certificate updates
+│   └── migrations/        Incremental catalog, department, and exam-workflow updates
 ├── includes/              Database, authentication, layout, and certificate helpers
 ├── tests/                 PHP regression and data validation scripts
 ├── uploads/courses/       Runtime administrator-uploaded thumbnails
 ├── install.php            One-time fresh-install setup
 ├── index.php              Public landing page
 ├── exams.php              Student course catalog
+├── dashboard.php          Student progress and upcoming schedule
+├── timetable.php          Student timetable (assigned faculty only)
+├── attendance.php          Student attendance (assigned records only)
 ├── take-exam.php          Timed exam
 ├── submit-exam.php        Submission and server-side grading
 ├── result.php             Exam result
@@ -122,7 +130,7 @@ The schema uses InnoDB, foreign keys, and `utf8mb4`. Core tables:
 
 | Table | Purpose |
 | --- | --- |
-| `users` | Student and administrator accounts |
+| `users` | Student, faculty, and HOD (existing `admin`) accounts |
 | `quizzes` | Course and exam settings, publication status, and image path |
 | `questions` | Exam questions and marks |
 | `options` | Multiple-choice options and correct-answer flags |
@@ -130,8 +138,48 @@ The schema uses InnoDB, foreign keys, and `utf8mb4`. Core tables:
 | `attempt_answers` | Saved answer selections and correctness |
 | `feedback` | Student feedback |
 | `certificates` | Issued and revoked certificate records |
+| `faculty_profiles` / `student_profiles` | Department branch, subject, registration, and academic details |
+| `faculty_student_assignments` | HOD-managed faculty-to-student assignments with one faculty per student |
+| `audit_logs` | Department account and assignment actions |
+| `exam_workflows` | Faculty ownership, approval status, schedule, and result publication |
+| `exam_assigned_students` | Students permitted to access each managed exam |
+| `notifications` | Per-user approval, exam, and result notifications |
+| `result_publications` | HOD identity and timestamp for each published result set |
+| `exam_autosaves` | Student selections saved during an active exam |
+| `faculty_attendance` | Date-wise attendance for faculty-assigned students |
+| `faculty_announcements` | Announcements visible to the author's assigned students |
+| `faculty_timetable` | Faculty academic calendar events |
+| `faculty_question_bank` | Faculty-owned reusable questions for all supported question types |
 
 See [`database/schema.sql`](database/schema.sql) for the full schema. **It drops and recreates application tables. Do not run `install.php` or import this schema against a database containing data you need to keep.**
+
+### Upgrade existing databases
+
+For an existing installation, back up the database and run the additive migration from the project directory:
+
+```powershell
+C:\xampp\php\php.exe C:\xampp\htdocs\online-exam-system\database\migrations\20261106_add_department_accounts.php
+```
+
+The department migration extends the existing role enum with `faculty`, creates profile/assignment/audit tables if missing, and creates empty profiles for existing accounts. The exam workflow migration creates approval, schedule, assigned-student, notification, and result-publication tables. Run it after the department migration:
+
+```powershell
+C:\xampp\php\php.exe C:\xampp\htdocs\online-exam-system\database\migrations\20261106_add_exam_workflow.php
+```
+
+Then apply the additive faculty workspace and HOD result-review migration:
+
+```powershell
+C:\xampp\php\php.exe C:\xampp\htdocs\online-exam-system\database\migrations\20261108_add_faculty_workspace.php
+```
+
+The faculty workspace migration adds attendance, announcements, timetable, reusable question-bank data, and result-approval metadata without deleting existing records. Faculty can evaluate and submit results, but only an HOD account can approve and publish them. Existing `admin` accounts continue to serve as HOD accounts. Back up the database before applying migrations. The default faculty assignment limit is 12 students; HOD can adjust it from Department management.
+
+Run the exam workflow regression check with:
+
+```powershell
+C:\xampp\php\php.exe tests\exam-workflow.php
+```
 
 ## Local setup (Windows / XAMPP)
 

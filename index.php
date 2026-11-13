@@ -3,18 +3,22 @@ require_once __DIR__ . '/includes/auth.php';
 
 $current = current_user();
 if ($current) {
-    redirect($current['role'] === 'admin' ? 'admin/dashboard.php' : 'dashboard.php');
+    redirect(match ($current['role']) {
+        'admin' => 'admin/dashboard.php',
+        'faculty' => 'faculty/dashboard.php',
+        default => 'dashboard.php',
+    });
 }
 
 $pdo = db();
 $stats = $pdo->query("
     SELECT
-        (SELECT COUNT(*) FROM quizzes WHERE is_published = 1) AS available_courses,
+        (SELECT COUNT(*) FROM quizzes) AS total_courses,
         (SELECT COUNT(*) FROM quizzes q
          WHERE q.is_published = 1
            AND EXISTS (SELECT 1 FROM questions WHERE quiz_id = q.id)) AS published_exams,
-        (SELECT COUNT(*) FROM users WHERE role = 'student') AS registered_students,
-        (SELECT COUNT(*) FROM certificates WHERE status = 'issued') AS certificates_awarded
+        (SELECT COUNT(*) FROM users WHERE role = 'student') AS total_students,
+        (SELECT COUNT(*) FROM users WHERE role = 'faculty') AS total_faculty
 ")->fetch();
 
 $courses = $pdo->query("
@@ -127,10 +131,10 @@ include __DIR__ . '/includes/header.php';
       <div class="home-stats-grid">
         <?php
         $statCards = [
-            ['available_courses', 'Available courses', 'bi-collection', 'home-stat-indigo'],
+            ['total_courses', 'Total courses', 'bi-collection', 'home-stat-indigo'],
             ['published_exams', 'Published exams', 'bi-journal-check', 'home-stat-blue'],
-            ['registered_students', 'Registered students', 'bi-people', 'home-stat-violet'],
-            ['certificates_awarded', 'Certificates awarded', 'bi-award', 'home-stat-amber'],
+            ['total_students', 'Total students', 'bi-people', 'home-stat-violet'],
+            ['total_faculty', 'Total faculty', 'bi-person-workspace', 'home-stat-amber'],
         ];
         foreach ($statCards as [$key, $label, $icon, $color]):
         ?>
@@ -154,12 +158,14 @@ include __DIR__ . '/includes/header.php';
       <div class="row g-4">
         <?php
         $features = [
-            ['bi-shield-lock', 'Secure Online Examinations', 'Protected student accounts and a reliable exam experience from start to submission.', 'home-feature-indigo'],
-            ['bi-lightning-charge', 'Instant Result Generation', 'Get your score and a clear breakdown as soon as your examination is submitted.', 'home-feature-blue'],
-            ['bi-graph-up-arrow', 'Performance Analytics', 'Follow score trends and understand your progress with helpful visual insights.', 'home-feature-violet'],
-            ['bi-award', 'Digital Achievement Certificates', 'Earn a verifiable certificate when your result reaches an achievement level.', 'home-feature-amber'],
-            ['bi-trophy', 'Leaderboards and Rankings', 'See how your performance grows and celebrate learning milestones along the way.', 'home-feature-cyan'],
-            ['bi-sliders', 'Easy Exam Management', 'Administrators can create courses, manage questions, and review exam attempts.', 'home-feature-rose'],
+            ['bi-shield-lock', 'Secure Examinations', 'Protected accounts and a reliable exam experience from approved start time through submission.', 'home-feature-indigo'],
+            ['bi-lightning-charge', 'Automatic Evaluation', 'Objective answers are evaluated automatically, with results shown through the platform workflow.', 'home-feature-blue'],
+            ['bi-calendar-check', 'Attendance Management', 'Faculty can record attendance for their assigned students and review date-wise records.', 'home-feature-violet'],
+            ['bi-graph-up-arrow', 'Performance Analytics', 'Follow score trends and understand learning progress with useful visual insights.', 'home-feature-amber'],
+            ['bi-award', 'Digital Certificates', 'Eligible students can access verifiable certificates for qualifying examination results.', 'home-feature-cyan'],
+            ['bi-signpost-split', 'Student Progress Tracking', 'Students can review completed exams, published results, attendance and achievements.', 'home-feature-rose'],
+            ['bi-journal-check', 'Exam Management', 'Faculty can prepare questions, manage examinations and submit evaluations for approval.', 'home-feature-indigo'],
+            ['bi-diagram-3', 'Role-Based Workspaces', 'Student, faculty and HOD access is organized around each role’s responsibilities.', 'home-feature-blue'],
         ];
         foreach ($features as [$icon, $title, $description, $color]):
         ?>
@@ -219,16 +225,17 @@ include __DIR__ . '/includes/header.php';
     <div class="container">
       <div class="home-section-heading text-center" data-reveal>
         <span class="home-section-kicker">Simple from the start</span>
-        <h2>Four steps to your <span class="home-gradient-text">next win.</span></h2>
+        <h2>Five steps to your <span class="home-gradient-text">next win.</span></h2>
         <p>Your learning journey is easy to begin and rewarding to complete.</p>
       </div>
       <div class="home-steps-grid">
         <?php
         $steps = [
-            ['bi-person-plus', '01', 'Create your account', 'Set up your student account and make the platform yours.'],
-            ['bi-search', '02', 'Browse available exams', 'Discover published courses by subject and choose what to learn.'],
-            ['bi-pencil-square', '03', 'Attend and submit', 'Complete your timed examination and submit your answers securely.'],
-            ['bi-graph-up-arrow', '04', 'See your progress', 'Review instant results and earn a certificate when eligible.'],
+            ['bi-box-arrow-in-right', '01', 'Sign in as a student', 'Access your student workspace with your account credentials.'],
+            ['bi-journal-bookmark', '02', 'View assigned exams', 'Review the examinations and schedules available to your account.'],
+            ['bi-pencil-square', '03', 'Attend the exam', 'Start during the approved window, complete the timed exam and submit your answers.'],
+            ['bi-clipboard-check', '04', 'Review your results', 'Check your evaluation after the result is approved and published.'],
+            ['bi-award', '05', 'Earn eligible certificates', 'Access a verifiable digital certificate when your score qualifies.'],
         ];
         foreach ($steps as $index => [$icon, $number, $title, $description]):
         ?>
@@ -236,9 +243,45 @@ include __DIR__ . '/includes/header.php';
             <div class="home-step-top"><span class="home-step-icon"><i class="bi <?= e($icon) ?>"></i></span><span class="home-step-number"><?= e($number) ?></span></div>
             <h3><?= e($title) ?></h3>
             <p><?= e($description) ?></p>
-            <?php if ($index < 3): ?><span class="home-step-connector" aria-hidden="true"><i class="bi bi-arrow-right"></i></span><?php endif; ?>
+            <?php if ($index < 4): ?><span class="home-step-connector" aria-hidden="true"><i class="bi bi-arrow-right"></i></span><?php endif; ?>
           </article>
         <?php endforeach; ?>
+      </div>
+    </div>
+  </section>
+
+  <section class="home-section home-roles-section" id="roles">
+    <div class="container">
+      <div class="home-section-heading text-center" data-reveal>
+        <span class="home-section-kicker">A workspace for every role</span>
+        <h2>Clear responsibilities, <span class="home-gradient-text">connected learning.</span></h2>
+        <p>Each account type has tools and permissions suited to its part in the examination process.</p>
+      </div>
+      <div class="row g-4">
+        <div class="col-md-6 col-lg-4" data-reveal>
+          <article class="home-role-card h-100">
+            <span class="home-role-icon home-role-student"><i class="bi bi-mortarboard"></i></span>
+            <h3>Student</h3>
+            <p>View assigned exams and schedules, take approved examinations, review published results, track attendance and access eligible certificates.</p>
+            <a href="<?= e(base_url('login.php')) ?>">Student sign in <i class="bi bi-arrow-up-right"></i></a>
+          </article>
+        </div>
+        <div class="col-md-6 col-lg-4" data-reveal>
+          <article class="home-role-card h-100">
+            <span class="home-role-icon home-role-faculty"><i class="bi bi-person-workspace"></i></span>
+            <h3>Faculty</h3>
+            <p>Manage assigned students, prepare and schedule examinations, record attendance, evaluate submissions and send results for HOD approval.</p>
+            <a href="<?= e(base_url('login.php')) ?>">Faculty sign in <i class="bi bi-arrow-up-right"></i></a>
+          </article>
+        </div>
+        <div class="col-md-6 col-lg-4" data-reveal>
+          <article class="home-role-card h-100">
+            <span class="home-role-icon home-role-hod"><i class="bi bi-shield-check"></i></span>
+            <h3>HOD / Super Admin</h3>
+            <p>Oversee users and departments, review examination and result approvals, publish approved results and monitor platform activity.</p>
+            <a href="<?= e(base_url('admin/login.php')) ?>">HOD sign in <i class="bi bi-arrow-up-right"></i></a>
+          </article>
+        </div>
       </div>
     </div>
   </section>
@@ -250,25 +293,19 @@ include __DIR__ . '/includes/header.php';
           <span class="home-section-kicker">Your hard work, recognized</span>
           <h2 class="home-achievements-title">Every achievement has a <span class="home-gradient-text">mark of its own.</span></h2>
           <p class="home-achievements-copy">Reach the required score in a completed exam to earn a digital certificate. Each level celebrates the progress you have made.</p>
-          <div class="home-no-award"><i class="bi bi-info-circle"></i><span>Scores below 35% do not receive a certificate.</span></div>
+          <div class="home-no-award"><i class="bi bi-info-circle"></i><span>Scores below 50% do not receive a certificate.</span></div>
         </div>
         <div class="col-lg-7" data-reveal>
           <div class="home-award-list">
             <article class="home-award-card home-award-silver">
               <span class="home-award-medal"><i class="bi bi-award-fill"></i></span>
               <span class="home-award-name"><strong>Silver</strong><small>Achievement Certificate</small></span>
-              <span class="home-award-range">35%–49.99%</span>
+              <span class="home-award-range">50%–79.99%</span>
               <i class="bi bi-arrow-up-right home-award-arrow"></i>
             </article>
             <article class="home-award-card home-award-gold">
               <span class="home-award-medal"><i class="bi bi-award-fill"></i></span>
               <span class="home-award-name"><strong>Gold</strong><small>Achievement Certificate</small></span>
-              <span class="home-award-range">50%–79.99%</span>
-              <i class="bi bi-arrow-up-right home-award-arrow"></i>
-            </article>
-            <article class="home-award-card home-award-platinum">
-              <span class="home-award-medal"><i class="bi bi-stars"></i></span>
-              <span class="home-award-name"><strong>Platinum</strong><small>Achievement Certificate</small></span>
               <span class="home-award-range">80%–100%</span>
               <i class="bi bi-arrow-up-right home-award-arrow"></i>
             </article>
@@ -285,7 +322,7 @@ include __DIR__ . '/includes/header.php';
           <span class="home-section-kicker">A few quick answers</span>
           <h2>Good to know <span class="home-gradient-text">before you begin.</span></h2>
           <p>Need more help? Our platform is designed to keep the exam experience clear at every step.</p>
-          <a class="home-faq-contact" href="mailto:aashish@marketdoctorsonline.com">Contact the team <i class="bi bi-arrow-up-right"></i></a>
+          <a class="home-faq-contact" href="#contact">Contact and support <i class="bi bi-arrow-down"></i></a>
         </div>
         <div class="col-lg-8" data-reveal>
           <div class="accordion home-faq-accordion" id="homeFaq">
@@ -296,6 +333,8 @@ include __DIR__ . '/includes/header.php';
                 ['Are results generated automatically?', 'Yes. Submitted answers are checked against the saved answer key and your result is calculated automatically.'],
                 ['How can I download certificates?', 'Eligible completed exams appear under My Certificates. Open a certificate to view or download its PDF.'],
                 ['Can I retake an examination?', 'You can start an available published exam again. Each completed submission is saved as its own attempt.'],
+                ['When can I see my result?', 'Results become available to students after the required evaluation and HOD approval and publication workflow is complete.'],
+                ['Who should I contact for help?', 'Use the support email or feedback form in the Contact and Support section at the end of this page.'],
             ];
             foreach ($faqs as $index => [$question, $answer]):
                 $faqId = 'homeFaq' . ($index + 1);
@@ -312,6 +351,22 @@ include __DIR__ . '/includes/header.php';
               </div>
             <?php endforeach; ?>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="home-section home-support-section" id="contact">
+    <div class="container">
+      <div class="home-support-card" data-reveal>
+        <div class="home-support-copy">
+          <span class="home-section-kicker">Here when you need us</span>
+          <h2>Contact and <span class="home-gradient-text">support.</span></h2>
+          <p>For platform questions or assistance, email the support contact or send a message through the feedback form.</p>
+        </div>
+        <div class="home-support-actions">
+          <a class="btn btn-primary" href="mailto:aashish@marketdoctorsonline.com"><i class="bi bi-envelope me-1"></i> Email support</a>
+          <a class="btn btn-outline-primary" href="<?= e(base_url('feedback.php')) ?>"><i class="bi bi-chat-dots me-1"></i> Send feedback</a>
         </div>
       </div>
     </div>

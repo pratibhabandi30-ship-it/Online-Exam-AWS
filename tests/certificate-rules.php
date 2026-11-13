@@ -6,13 +6,12 @@ require_once __DIR__ . '/../includes/certificates.php';
 $cases = [
     25.0 => null,
     34.0 => null,
-    35.0 => 'Silver',
-    49.0 => 'Silver',
-    50.0 => 'Gold',
-    66.7 => 'Gold',
-    79.0 => 'Gold',
-    80.0 => 'Platinum',
-    100.0 => 'Platinum',
+    49.99 => null,
+    50.0 => 'Silver',
+    66.7 => 'Silver',
+    79.99 => 'Silver',
+    80.0 => 'Gold',
+    100.0 => 'Gold',
 ];
 
 foreach ($cases as $percentage => $expected) {
@@ -27,19 +26,19 @@ foreach ($cases as $percentage => $expected) {
     }
 }
 
-foreach ([0.0, 34.99] as $percentage) {
+foreach ([0.0, 34.99, 49.99] as $percentage) {
     if (certificate_type_for_percentage($percentage) !== null) {
         throw new RuntimeException(sprintf('Expected %s%% to receive no certificate.', $percentage));
     }
 }
 
-foreach ([35.0, 49.99] as $percentage) {
+foreach ([50.0, 79.99] as $percentage) {
     if (certificate_type_for_percentage($percentage) !== 'Silver') {
         throw new RuntimeException(sprintf('Expected %s%% to receive Silver.', $percentage));
     }
 }
 
-foreach ([50.0, 79.99] as $percentage) {
+foreach ([80.0, 100.0] as $percentage) {
     if (certificate_type_for_percentage($percentage) !== 'Gold') {
         throw new RuntimeException(sprintf('Expected %s%% to receive Gold.', $percentage));
     }
@@ -50,11 +49,11 @@ if (certificate_type_for_percentage(100.01) !== null) {
 }
 
 $record = [
-    'score' => 49,
+    'score' => 50,
     'total_marks' => 100,
     'certificate_type' => 'Silver',
-    'percentage' => '49.00000',
-    'grade' => 'F',
+    'percentage' => '50.00000',
+    'grade' => 'D',
     'student_id' => 7,
     'user_id' => 7,
     'exam_id' => 12,
@@ -63,9 +62,18 @@ $record = [
 if (!certificate_record_matches_attempt($record)) {
     throw new RuntimeException('A matching certificate and attempt should validate.');
 }
-$record['percentage'] = '50.00000';
+$record['score'] = 49;
+$record['percentage'] = '49.00000';
+$record['grade'] = 'F';
 if (certificate_record_matches_attempt($record)) {
-    throw new RuntimeException('A certificate with a modified percentage must not validate.');
+    throw new RuntimeException('An ineligible certificate must not validate.');
+}
+$record['score'] = 80;
+$record['certificate_type'] = 'Gold';
+$record['percentage'] = '80.00000';
+$record['grade'] = 'A';
+if (!certificate_record_matches_attempt($record)) {
+    throw new RuntimeException('A matching Gold certificate at the 80% boundary should validate.');
 }
 
 echo "Certificate percentage rules passed.\n";
